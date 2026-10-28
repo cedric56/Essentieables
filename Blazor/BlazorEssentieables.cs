@@ -14,9 +14,9 @@ using System.Threading.Tasks;
 
 namespace Essentieables;
 
-public static class BlazorEssentials
+public static class BlazorEssentieables
 {
-    public static void UseAvaeBlazorEssentials(this IServiceCollection services)
+    public static void UseBlazorEssentieables(this IServiceCollection services)
     {
         var appInfo = new BlazorAppInfo();
         var preferences = new BlazorPreferences();

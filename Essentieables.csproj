@@ -15,7 +15,7 @@
     <IsAndroidTFM>$([System.String]::Copy('$(TargetFramework)').Contains('-android'))</IsAndroidTFM>
     <IsIosTFM>$([System.String]::Copy('$(TargetFramework)').Contains('-ios'))</IsIosTFM>
     <IsMacTFM>$([System.String]::Copy('$(TargetFramework)').Contains('-macos'))</IsMacTFM>
-    <IsBrowserTFM>$([System.String]::Copy('$(TargetFramework)').Contains('-browser'))</IsBrowserTFM>
+    <!--<IsBrowserTFM>$([System.String]::Copy('$(TargetFramework)').Contains('-browser'))</IsBrowserTFM>-->
     <IsWindowsTFM>$([System.String]::Copy('$(TargetFramework)').Contains('-windows'))</IsWindowsTFM>
     <!--<TreatWarningsAsErrors>true</TreatWarningsAsErrors-->
     <IsAotCompatible>true</IsAotCompatible>
@@ -35,6 +35,7 @@
 
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="build\Essentieables.targets" Pack="true" PackagePath="buildTransitive\" />
   </ItemGroup>
 
   <ItemGroup>
@@ -48,6 +49,11 @@
       <PackagePath>lib\$(TargetFramework)\Avalonia\%(RecursiveDir)%(Filename)%(Extension)</PackagePath>
       <PackageCopyToOutput>true</PackageCopyToOutput>
     </TfmSpecificPackageFile>
+    <Compile Remove="Avalonia.Controls.Maui.Essentials\**\*.*" />
+    <TfmSpecificPackageFile Include="Avalonia.Controls.Maui.Essentials\**\*.*">
+      <PackagePath>lib\$(TargetFramework)\Avalonia.Controls.Maui.Essentials\%(RecursiveDir)%(Filename)%(Extension)</PackagePath>
+      <PackageCopyToOutput>true</PackageCopyToOutput>
+    </TfmSpecificPackageFile>
   </ItemGroup>
 
   <ItemGroup Condition="'$(IsWindowsTFM)' == 'true'">
@@ -55,9 +61,9 @@
   </ItemGroup>
 
   <!-- Browser -->
-  <ItemGroup Condition="'$(IsBrowserTFM)' == 'true'">
+  <!--<ItemGroup Condition="'$(IsBrowserTFM)' == 'true'">
     <Compile Include="**\*.browser.cs" />
-  </ItemGroup>
+  </ItemGroup>-->
 
   <!-- macOS -->
   <ItemGroup Condition="'$(IsMacTFM)' == 'true'">
@@ -70,8 +76,6 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.14" />
-    <PackageReference Include="Microsoft.Maui.Essentials" Version="11.0.0-rc.1.26451.6" />
-    <!--<PackageReference Include="Avalonia.Controls.Maui.Essentials" Version="11.0.0-rc.1.26252.343" />-->
-
+    <PackageReference Include="Microsoft.Maui.Essentials" Version="10.0.120" />
   </ItemGroup>
 </Project>

@@ -4,13 +4,14 @@ using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Dispatching;
 using System;
 using System.Collections.Generic;
-using AvaloniaFileSystem = Avalonia.Controls.Maui.Essentials.AvaloniaFileSystem;
-using AvaloniaHapticFeedback = Avalonia.Controls.Maui.Essentials.AvaloniaHapticFeedback;
-using AvaloniaPreferences = Avalonia.Controls.Maui.Essentials.AvaloniaPreferences;
-using AvaloniaScreenshot = Avalonia.Controls.Maui.Essentials.AvaloniaScreenshot;
-using AvaloniaMediaPicker = Avalonia.Controls.Maui.Essentials.AvaloniaMediaPicker;
+//using AvaloniaFileSystem = Avalonia.Controls.Maui.Essentials.AvaloniaFileSystem;
+//using AvaloniaHapticFeedback = Avalonia.Controls.Maui.Essentials.AvaloniaHapticFeedback;
+//using AvaloniaPreferences = Avalonia.Controls.Maui.Essentials.AvaloniaPreferences;
+//using AvaloniaScreenshot = Avalonia.Controls.Maui.Essentials.AvaloniaScreenshot;
+//using AvaloniaMediaPicker = Avalonia.Controls.Maui.Essentials.AvaloniaMediaPicker;
 using Dispatcher = Avalonia.Threading.Dispatcher;
 using Avalonia;
+using Avalonia.Controls.Maui.Essentials;
 
 namespace Essentieables;
 
@@ -32,10 +33,10 @@ public static class AvaloniaExtensions
     /// </remarks>
     /// <param name="builder">The Avalonia application builder.</param>
     /// <returns>The original builder, allowing method chaining.</returns>
-    public static AppBuilder UseAvaeEssentials(this AppBuilder builder)
+    public static AppBuilder UseEssentieables(this AppBuilder builder)
     {
         var services = new ServiceCollection();
-        services.UseAvaeEssentials();
+        services.UseEssentieables();
         return builder;
     }
 
@@ -54,7 +55,7 @@ public static class AvaloniaExtensions
     /// <param name="services">
     /// The dependency injection service collection to configure.
     /// </param>
-    public static void UseAvaeEssentials(this IServiceCollection services)
+    public static void UseEssentieables(this IServiceCollection services)
     {
         // Initialize the dispatcher used by Essentieables to marshal
         // operations onto the current Avalonia UI thread.
@@ -63,16 +64,13 @@ public static class AvaloniaExtensions
         // Create shared Avalonia-specific dependencies used by multiple services.
         // These instances are passed to the platform implementations below.
         var platformProvider = new AvaeTopLevelStateManager();
-        var screenshot = new AvaloniaScreenshot(platformProvider);
-        var filepicker = (Microsoft.Maui.Storage.IFilePicker)
-            AvaloniaDefaults.CreateAvaloniaFilePicker(platformProvider);
-        var mediapicker = (Microsoft.Maui.Media.IMediaPicker)
-            AvaloniaDefaults.CreateAvaloniaMediaPicker(platformProvider);
-        var hapticFeedback = new AvaloniaHapticFeedback();
-        var preferences = new AvaloniaPreferences();
-        var fileSystem = new AvaloniaFileSystem();
-        var webAuthenticator = (Microsoft.Maui.Authentication.IWebAuthenticator)
-            AvaloniaDefaults.CreateAvaloniaWebAuthenticator(platformProvider);
+        var screenshot = new Avalonia.Controls.Maui.Essentials.AvaloniaScreenshot(platformProvider);
+        var filepicker = new Avalonia.Controls.Maui.Essentials.AvaloniaFilePicker(platformProvider);
+        var mediapicker = new Avalonia.Controls.Maui.Essentials.AvaloniaMediaPicker(platformProvider);
+        var hapticFeedback = new Avalonia.Controls.Maui.Essentials.AvaloniaHapticFeedback();
+        var preferences = new Avalonia.Controls.Maui.Essentials.AvaloniaPreferences();
+        var fileSystem = new Avalonia.Controls.Maui.Essentials.AvaloniaFileSystem();
+        var webAuthenticator = new Avalonia.Controls.Maui.Essentials.AvaloniaWebAuthenticator(platformProvider);
 
         // Windows: use the Windows-specific .NET MAUI implementations where
         // supported by the current Windows version, with Avae replacements
@@ -107,7 +105,7 @@ public static class AvaloniaExtensions
                 OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalLauncherImplementation() : null!,
                 OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalMagnetometerImplementation() : null!,
                 OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalMapImplementation() : null!,
-                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new AvaeMediaPicker(platformProvider,(AvaloniaMediaPicker)mediapicker) : null!,
+                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new AvaeMediaPicker(platformProvider, mediapicker) : null!,
                 OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalOrientationSensorImplementation() : null!,
                 new AvaePhoneDialer(),
                 preferences,
