@@ -1,0 +1,19 @@
+﻿using Microsoft.JSInterop;
+using Microsoft.Maui.ApplicationModel.Communication;
+using System;
+
+namespace Essentieables;
+
+
+/// <summary>Phone dialing via a tel: link (effective on mobile browsers or with a desktop handler).</summary>
+public class BlazorPhoneDialer: IPhoneDialer
+{
+    public bool IsSupported => true;
+
+    public async void Open(string number)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(number);
+        BlazorEssentials.EnsureInitialized();
+        await BlazorLauncher.NavigateToAsync("tel:" + Uri.EscapeDataString(number));
+    }
+}

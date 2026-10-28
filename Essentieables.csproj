@@ -1,0 +1,77 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>
+      net10.0;
+      net10.0-browser;
+      net10.0-ios;
+      net10.0-android;
+      net10.0-macos;
+      net10.0-windows10.0.19041
+    </TargetFrameworks>
+    <Nullable>enable</Nullable>
+    <IsLinuxOS Condition="$([MSBuild]::IsOSPlatform('linux'))">true</IsLinuxOS>
+    <IsWindowsOS>$([MSBuild]::IsOSPlatform('windows'))</IsWindowsOS>
+    <IsAndroidTFM>$([System.String]::Copy('$(TargetFramework)').Contains('-android'))</IsAndroidTFM>
+    <IsIosTFM>$([System.String]::Copy('$(TargetFramework)').Contains('-ios'))</IsIosTFM>
+    <IsMacTFM>$([System.String]::Copy('$(TargetFramework)').Contains('-macos'))</IsMacTFM>
+    <IsBrowserTFM>$([System.String]::Copy('$(TargetFramework)').Contains('-browser'))</IsBrowserTFM>
+    <IsWindowsTFM>$([System.String]::Copy('$(TargetFramework)').Contains('-windows'))</IsWindowsTFM>
+    <!--<TreatWarningsAsErrors>true</TreatWarningsAsErrors-->
+    <IsAotCompatible>true</IsAotCompatible>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Version>1.0.0-preview.1</Version>
+    <PackageId>Essentieables</PackageId>
+    <Authors>Cedric</Authors>
+    <Description>Maui essentials on Maui/Blazor/Avalonia</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <SupportedOSPlatformVersion Condition="'$(IsAndroidTFM)' == 'true'">24</SupportedOSPlatformVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Blazor\**\*.*" />
+    <TfmSpecificPackageFile Include="Blazor\**\*.*">
+      <PackagePath>lib\$(TargetFramework)\Blazor\%(RecursiveDir)%(Filename)%(Extension)</PackagePath>
+      <PackageCopyToOutput>true</PackageCopyToOutput>
+    </TfmSpecificPackageFile>
+    <Compile Remove="Avalonia\**\*.*" />
+    <TfmSpecificPackageFile Include="Avalonia\**\*.*">
+      <PackagePath>lib\$(TargetFramework)\Avalonia\%(RecursiveDir)%(Filename)%(Extension)</PackagePath>
+      <PackageCopyToOutput>true</PackageCopyToOutput>
+    </TfmSpecificPackageFile>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(IsWindowsTFM)' == 'true'">
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
+  </ItemGroup>
+
+  <!-- Browser -->
+  <ItemGroup Condition="'$(IsBrowserTFM)' == 'true'">
+    <Compile Include="**\*.browser.cs" />
+  </ItemGroup>
+
+  <!-- macOS -->
+  <ItemGroup Condition="'$(IsMacTFM)' == 'true'">
+    <PackageReference Include="Microsoft.Maui.Platforms.MacOS.Essentials" Version="0.1.0-preview.12.26368.2" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(IsLinuxOS)' == 'true'">
+    <PackageReference Include="Microsoft.Maui.Platforms.Linux.Gtk4.Essentials" Version="0.1.0-preview.12.26421.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Maui.Essentials" Version="11.0.0-rc.1.26451.6" />
+    <!--<PackageReference Include="Avalonia.Controls.Maui.Essentials" Version="11.0.0-rc.1.26252.343" />-->
+
+  </ItemGroup>
+</Project>
