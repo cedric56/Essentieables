@@ -6,6 +6,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Controls.Maui.Essentials;
 using System;
 using Application = Avalonia.Application;
+using Window = Avalonia.Controls.Window;
 
 namespace Essentieables;
 
