@@ -27,8 +27,8 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Version>1.0.0-preview.1</Version>
     <PackageId>Essentieables</PackageId>
-    <Authors>Cédric Boutin</Authors>
-    <Copyright>Copyright (c) 2026 Cédric Boutin</Copyright>
+    <Authors>Cedric Boutin</Authors>
+    <Copyright>Copyright (c) 2026 Cedric Boutin</Copyright>
     <Description>Maui essentials on Maui/Blazor/Avalonia</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -42,6 +42,8 @@
 
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="\" />
+    <!-- Required by the MIT and Apache-2.0 notices of the incorporated components. -->
+    <None Include="THIRD-PARTY-NOTICES.txt" Pack="true" PackagePath="\" />
     <!-- buildTransitive/: the app usually gets the package through its ViewModels project.
          The targets detect Avalonia/Blazor, so other projects in the chain are not affected. -->
     <None Include="build\Essentieables.targets" Pack="true" PackagePath="buildTransitive\" />
