@@ -1,7 +1,10 @@
 ﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
-    <MyLibTargetFramework Condition="$([System.String]::Copy('$(TargetFramework)').Contains('net11.0'))">net10.0</MyLibTargetFramework>
-    <MyLibTargetFramework Condition="'$(MyLibTargetFramework)' == ''">$(TargetFramework)</MyLibTargetFramework>
+    <!-- The injected sources are identical in every lib/<tfm> folder, and the consumer's own TFM
+         (net10.0-windows10.0.19041.0, net10.0-android35.0, net11.0-ios...) rarely matches a folder name
+         exactly, which silently compiled nothing. Always read them from the net10.0 folder;
+         platform code is selected by the consumer's #if symbols. -->
+    <MyLibTargetFramework>net10.0</MyLibTargetFramework>
   </PropertyGroup>
   
   <ItemGroup Condition="'$(UsingMicrosoftNETSdkWeb)' == 'true' OR '$(UsingMicrosoftNETSdkBlazorWebAssembly)' == 'true'">

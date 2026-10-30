@@ -1,0 +1,12 @@
+<Project>
+  <!-- Consumer projects restore the Essentieables package produced by the CI "pack" step
+       (dotnet pack -o artifacts/packages -p:Version=$(EssentieablesVersion)). -->
+  <PropertyGroup>
+    <EssentieablesVersion Condition="'$(EssentieablesVersion)' == ''">1.0.0-local</EssentieablesVersion>
+    <RestoreAdditionalProjectSources>$(MSBuildThisFileDirectory)../../artifacts/packages</RestoreAdditionalProjectSources>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <AvaloniaVersion>12.1.4</AvaloniaVersion>
+  </PropertyGroup>
+</Project>

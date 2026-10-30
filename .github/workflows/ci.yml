@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+jobs:
+  platform:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux desktop (maui-labs Gtk4 services) + Android + browser + Blazor hosts
+          - name: Linux · Android · Browser · Blazor
+            os: ubuntu-latest
+            workloads: android
+            lib-tfms: net10.0;net10.0-browser;net10.0-android
+            consumer-tfms: net10.0;net10.0-android
+            blazor: true
+          # Windows desktop (WinRT ports) + windows TFM (MAUI Essentials WinUI build)
+          - name: Windows
+            os: windows-latest
+            workloads: ''
+            lib-tfms: net10.0;net10.0-windows10.0.19041
+            consumer-tfms: net10.0;net10.0-windows10.0.19041.0
+            blazor: false
+          # macOS desktop (net10.0 fallback + net10.0-macos maui-labs services) + iOS
+          - name: macOS · iOS
+            os: macos-latest
+            workloads: macos ios
+            lib-tfms: net10.0;net10.0-ios;net10.0-macos
+            consumer-tfms: net10.0-ios;net10.0-macos
+            blazor: false
+
+    defaults:
+      run:
+        shell: pwsh
+
+    env:
+      EssentieablesVersion: 1.0.0-ci.${{ github.run_number }}.${{ github.run_attempt }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install workloads
+        if: matrix.workloads != ''
+        run: dotnet workload install ${{ matrix.workloads }}
+
+      - name: Unit tests
+        run: >
+          dotnet test tests/Essentieables.Tests
+          -c Release
+          -p:EssentieablesTargetFrameworks="${{ matrix.lib-tfms }}"
+          --logger "trx;LogFileName=results.trx"
+          --results-directory artifacts/test-results
+
+      - name: Pack
+        run: >
+          dotnet pack Essentieables.csproj
+          -c Release
+          -o artifacts/packages
+          -p:EssentieablesTargetFrameworks="${{ matrix.lib-tfms }}"
+          -p:Version=${{ env.EssentieablesVersion }}
+
+      - name: Consumer compiles the injected sources
+        run: >
+          dotnet build tests/Consumers/LibraryConsumer
+          -c Release
+          -p:ConsumerTargetFrameworks="${{ matrix.consumer-tfms }}"
+
+      - name: Avalonia headless smoke test
+        run: dotnet run --project tests/Consumers/AvaloniaSmoke -c Release
+
+      - name: Blazor WebAssembly consumer
+        if: matrix.blazor
+        run: |
+          dotnet build tests/Consumers/BlazorWasmConsumer -c Release
+          if (-not (Test-Path tests/Consumers/BlazorWasmConsumer/wwwroot/BlazorEssentials.js)) {
+            throw "BlazorEssentials.js was not copied into wwwroot"
+          }
+
+      - name: Blazor Server consumer
+        if: matrix.blazor
+        run: dotnet build tests/Consumers/BlazorServerConsumer -c Release
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ runner.os }}
+          path: artifacts/test-results
+          if-no-files-found: ignore
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ runner.os }}
+          path: artifacts/packages/*.nupkg

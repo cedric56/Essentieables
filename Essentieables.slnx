@@ -1,3 +1,6 @@
 <Solution>
   <Project Path="Essentieables.csproj" />
+  <Folder Name="/tests/">
+    <Project Path="tests/Essentieables.Tests/Essentieables.Tests.csproj" />
+  </Folder>
 </Solution>

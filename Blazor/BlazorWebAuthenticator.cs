@@ -50,7 +50,7 @@ internal class BlazorWebAuthenticator : IWebAuthenticator
     }
 
     // Microsoft.AspNetCore.WebUtilities is not available in Blazor WebAssembly projects.
-    static string BuildStartUrl(IEnumerable<KeyValuePair<string, string?>> query) =>
+    internal static string BuildStartUrl(IEnumerable<KeyValuePair<string, string?>> query) =>
         "/auth/start?" + string.Join("&", query
             .Where(kv => kv.Value is not null)
             .Select(kv => $"{Uri.EscapeDataString(kv.Key)}={Uri.EscapeDataString(kv.Value!)}"));

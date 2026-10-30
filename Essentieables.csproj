@@ -9,6 +9,8 @@
       net10.0-macos;
       net10.0-windows10.0.19041
     </TargetFrameworks>
+    <!-- CI builds one platform per runner: -p:EssentieablesTargetFrameworks="net10.0;net10.0-android" -->
+    <TargetFrameworks Condition="'$(EssentieablesTargetFrameworks)' != ''">$(EssentieablesTargetFrameworks)</TargetFrameworks>
     <Nullable>enable</Nullable>
     <IsLinuxOS Condition="$([MSBuild]::IsOSPlatform('linux'))">true</IsLinuxOS>
     <IsWindowsOS>$([MSBuild]::IsOSPlatform('windows'))</IsWindowsOS>
@@ -27,6 +29,8 @@
     <Description>Maui essentials on Maui/Blazor/Avalonia</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <!-- tests/ holds separate projects: keep them out of the library's default globs. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);tests/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <PropertyGroup>

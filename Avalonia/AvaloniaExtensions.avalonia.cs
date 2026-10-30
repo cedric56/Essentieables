@@ -140,7 +140,7 @@ public static class AvaloniaExtensions
                 filepicker,
                 fileSystem,
                 new Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Devices.LinuxFlashlight(),
-                new Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Sensors.LinuxGeocoding(),
+                new AvaeGeocoding(), // maui-labs LinuxGeocoding is a stub
                 new Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Sensors.LinuxGeolocation(),
                 new Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Sensors.LinuxGyroscope(),
                 hapticFeedback,
@@ -168,7 +168,7 @@ public static class AvaloniaExtensions
         {
             // Avalonia/MAUI interop may otherwise trigger cross-thread warnings
             // in APIs used by this integration.
-            NSApplication.CheckForIllegalCrossThreadCalls = false;
+            AppKit.NSApplication.CheckForIllegalCrossThreadCalls = false;
 
             services.SetDefaults(
                 null!,
@@ -187,10 +187,10 @@ public static class AvaloniaExtensions
                 filepicker,
                 fileSystem,
                 (Microsoft.Maui.Devices.IFlashlight)MacosDefaults.CreateFlashlight(),
-                null!,
+                new AvaeGeocoding(),
                 (Microsoft.Maui.Devices.Sensors.IGeolocation)MacosDefaults.CreateGeolocation(),
                 null!,
-                hapticFeedback,
+                (Microsoft.Maui.Devices.IHapticFeedback)MacosDefaults.CreateHapticFeedback(),
                 (Microsoft.Maui.ApplicationModel.ILauncher)MacosDefaults.CreateLauncher(),
                 null!,
                 (Microsoft.Maui.ApplicationModel.IMap)MacosDefaults.CreateMap(),
