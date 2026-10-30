@@ -1,4 +1,7 @@
-﻿//MIT License
+﻿// Modifications Copyright (c) 2026 Cedric Boutin. Licensed under the MIT License.
+// Original code: see the MarketAlly notice below and THIRD-PARTY-NOTICES.txt.
+
+//MIT License
 
 //Copyright(c) 2025 MarketAlly Pte Ltd
 

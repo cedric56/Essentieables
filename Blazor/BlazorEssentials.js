@@ -1,4 +1,6 @@
-﻿// Browser Essentials interop module.
+﻿// Copyright (c) 2026 Cedric Boutin. Licensed under the MIT License. See LICENSE.txt in the project root.
+
+// Browser Essentials interop module.
 // Loaded by BrowserEssentials.InitializeAsync() via JSHost.ImportAsync and
 // bound from C# with [JSImport]. All functions are plain ES module exports
 // with no dependencies.

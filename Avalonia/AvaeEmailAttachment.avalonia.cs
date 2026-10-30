@@ -1,4 +1,6 @@
-﻿using Avalonia.Controls.Maui.Essentials;
+﻿// Copyright (c) 2026 Cedric Boutin. Licensed under the MIT License. See LICENSE.txt in the project root.
+
+using Avalonia.Controls.Maui.Essentials;
 using Avalonia.Platform.Storage;
 using Microsoft.Maui.ApplicationModel.Communication;
 using System.IO;

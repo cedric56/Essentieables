@@ -1,4 +1,7 @@
-﻿using Microsoft.Maui.Accessibility;
+﻿// Copyright (c) 2026 Cedric Boutin. Licensed under the MIT License. See LICENSE.txt in the project root.
+// Portions Copyright (c) 2025 AvaloniaUI (Avalonia.Controls.Maui, MIT License). See THIRD-PARTY-NOTICES.txt.
+
+using Microsoft.Maui.Accessibility;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.ApplicationModel.Communication;
 using Microsoft.Maui.ApplicationModel.DataTransfer;

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Cedric Boutin. Licensed under the MIT License. See LICENSE.txt in the project root.
+// Portions Copyright (c) .NET Foundation and Contributors (.NET MAUI, MIT License). See THIRD-PARTY-NOTICES.txt.
+
 namespace Essentieables;
 
 // Detect if 3/4ths of the accelerometer events in the last half second are accelerating

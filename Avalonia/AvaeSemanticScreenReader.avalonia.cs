@@ -1,4 +1,6 @@
-﻿using Microsoft.Maui.Accessibility;
+﻿// Copyright (c) 2026 Cedric Boutin. Licensed under the MIT License. See LICENSE.txt in the project root.
+
+using Microsoft.Maui.Accessibility;
 using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;

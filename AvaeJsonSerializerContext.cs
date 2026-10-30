@@ -1,4 +1,6 @@
-﻿using System.Collections.Generic;
+﻿// Copyright (c) 2026 Cedric Boutin. Licensed under the MIT License. See LICENSE.txt in the project root.
+
+using System.Collections.Generic;
 using System.Globalization;
 using System.Text.Json.Serialization;
 

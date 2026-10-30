@@ -27,7 +27,8 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Version>1.0.0-preview.1</Version>
     <PackageId>Essentieables</PackageId>
-    <Authors>Cedric</Authors>
+    <Authors>Cédric Boutin</Authors>
+    <Copyright>Copyright (c) 2026 Cédric Boutin</Copyright>
     <Description>Maui essentials on Maui/Blazor/Avalonia</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

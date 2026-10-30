@@ -1,4 +1,6 @@
-﻿using System;
+﻿// Copyright (c) 2026 Cedric Boutin. Licensed under the MIT License. See LICENSE.txt in the project root.
+
+using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Text;

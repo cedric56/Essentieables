@@ -264,6 +264,11 @@ Microsoft.Maui.Essentials, maui-labs or Avalonia.Controls.Maui.Essentials alread
 
 ## License
 
-MIT, see [LICENSE.txt](LICENSE.txt). Third-party notices are in [THIRD-PARTY-LICENCES.txt](THIRD-PARTY-LICENCES.txt).
+Copyright (c) 2026 Cedric Boutin. MIT, see [LICENSE.txt](LICENSE.txt).
+
+Essentieables incorporates code from .NET MAUI, Avalonia.Controls.Maui, MarketAlly and ASP.NET Core,
+and geocodes with OpenStreetMap data (© OpenStreetMap contributors, ODbL). Their notices are in
+[THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt), which ships in the package and must accompany
+any redistribution. Apps that show geocoding results must credit OpenStreetMap.
 
 Thanks to the Avalonia and .NET MAUI teams.

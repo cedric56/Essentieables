@@ -1,4 +1,6 @@
-﻿using Microsoft.Maui.ApplicationModel.Communication;
+﻿// Copyright (c) 2026 Cedric Boutin. Licensed under the MIT License. See LICENSE.txt in the project root.
+
+using Microsoft.Maui.ApplicationModel.Communication;
 using System;
 using System.Linq;
 using System.Text;

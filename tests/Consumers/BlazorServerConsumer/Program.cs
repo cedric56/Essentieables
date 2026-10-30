@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Cedric Boutin. Licensed under the MIT License. See LICENSE.txt in the project root.
+
 using Essentieables;
 
 var builder = WebApplication.CreateBuilder(args);

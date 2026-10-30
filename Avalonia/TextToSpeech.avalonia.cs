@@ -1,4 +1,7 @@
-﻿using Essentieables;
+﻿// Copyright (c) 2026 Cedric Boutin. Licensed under the MIT License. See LICENSE.txt in the project root.
+// Portions Copyright (c) .NET Foundation and Contributors (.NET MAUI, MIT License). See THIRD-PARTY-NOTICES.txt.
+
+using Essentieables;
 using Microsoft.Maui.Media;
 using System;
 using System.Collections.Generic;

@@ -71,6 +71,7 @@ jobs:
           dotnet test tests/Essentieables.Tests
           -c Release
           -p:EssentieablesTargetFrameworks=net10.0
+          -p:GeneratePackageOnBuild=false
           --logger "trx;LogFileName=results.trx"
           --results-directory artifacts/test-results
 
@@ -80,7 +81,10 @@ jobs:
           -c Release
           -o artifacts/packages
           -p:Version=${{ env.EssentieablesVersion }}
+          -p:GeneratePackageOnBuild=false
         env:
+          # GeneratePackageOnBuild=false: with it, the pack started by the build of the first
+          # target framework looks for the other frameworks' DLLs before they exist (NU5026).
           # Lists go through the environment: on the command line both ';' and ','
           # separate properties (MSB1006). MSBuild reads environment variables as properties.
           EssentieablesTargetFrameworks: ${{ matrix.lib-tfms }}

@@ -1,4 +1,6 @@
-﻿using Essentieables;
+﻿// Copyright (c) 2026 Cedric Boutin. Licensed under the MIT License. See LICENSE.txt in the project root.
+
+using Essentieables;
 using Avalonia.Controls.Maui.Essentials;
 using Microsoft.Maui.ApplicationModel.Communication;
 using Microsoft.Maui.Storage;
