@@ -39,6 +39,12 @@ public class AddressInterop
     [JsonPropertyName("hamlet")]
     public string? Hamlet { get; set; }
 
+    [JsonPropertyName("city")]
+    public string? City { get; set; }
+
+    [JsonPropertyName("town")]
+    public string? Town { get; set; }
+
     [JsonPropertyName("village")]
     public string? Village { get; set; }
 
@@ -73,7 +79,7 @@ public class AddressInterop
 public class PlacemarkResponseInterop
 {
     [JsonPropertyName("place_id")]
-    public int PlaceId { get; set; }
+    public long PlaceId { get; set; }
 
     [JsonPropertyName("licence")]
     public string? License { get; set; }
@@ -82,7 +88,7 @@ public class PlacemarkResponseInterop
     public string? OsmType { get; set; }
 
     [JsonPropertyName("osm_id")]
-    public int OsmId { get; set; }
+    public long OsmId { get; set; }
 
     [JsonPropertyName("lat")]
     public string? Lat { get; set; }
@@ -100,7 +106,7 @@ public class PlacemarkResponseInterop
     public int PlaceRank { get; set; }
 
     [JsonPropertyName("importance")]
-    public string? ImportanceStr { get; set; }
+    public double Importance { get; set; }
 
     [JsonPropertyName("addresstype")]
     public string? AddressType { get; set; }
@@ -119,7 +125,6 @@ public class PlacemarkResponseInterop
 
     public double LatValue => double.Parse(Lat!, CultureInfo.InvariantCulture);
     public double LonValue => double.Parse(Lon!, CultureInfo.InvariantCulture);
-    public double Importance => double.Parse(ImportanceStr!, CultureInfo.InvariantCulture);
 
 }
 

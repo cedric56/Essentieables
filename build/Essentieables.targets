@@ -13,7 +13,7 @@
     <PackageReference Include="WindowsContracts.Net.Foundation.UniversalApiContract" Version="5.19041.10">
       <PrivateAssets>compile</PrivateAssets>
     </PackageReference>
-    <PackageReference Condition="$(IsMacTFM) == 'true'"
+    <PackageReference Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'macos'"
                      Include="Microsoft.Maui.Platforms.MacOS.Essentials" Version="0.1.0-preview.12.26368.2" >
       <PrivateAssets>compile</PrivateAssets>
       <ExcludeAssets>analyzers</ExcludeAssets>
@@ -46,7 +46,7 @@
   <Target Name="CopyBlazorAssets" BeforeTargets="BeforeCompile"
         Condition="('$(UsingMicrosoftNETSdkWeb)' == 'true' OR '$(UsingMicrosoftNETSdkBlazorWebAssembly)' == 'true') AND Exists('$(MSBuildProjectDirectory)\wwwroot')">
     <ItemGroup>
-      <_Assets Include="$(MSBuildThisFileDirectory)Blazor\BlazorEssentials.js" />
+      <_Assets Include="$(MSBuildThisFileDirectory)..\lib\$(MyLibTargetFramework)\Blazor\BlazorEssentials.js" />
     </ItemGroup>
     <Copy SourceFiles="@(_Assets)"
           DestinationFolder="$(MSBuildProjectDirectory)\wwwroot\"

@@ -40,7 +40,7 @@ public static class MacosDefaults
     //internal extern static object CreateCompass();
 
     [UnsafeAccessor(UnsafeAccessorKind.Constructor)]
-    [return: UnsafeAccessorType("Microsoft.Maui.Platforms.MacOS.Essentials.ConnectivtyImplementation, Microsoft.Maui.Platforms.MacOS.Essentials")]
+    [return: UnsafeAccessorType("Microsoft.Maui.Platforms.MacOS.Essentials.ConnectivityImplementation, Microsoft.Maui.Platforms.MacOS.Essentials")]
     public extern static object CreateConnectivity();
 
     //[UnsafeAccessor(UnsafeAccessorKind.Constructor)]
@@ -68,7 +68,7 @@ public static class MacosDefaults
     //internal extern static object CreateGeocoding();
 
     [UnsafeAccessor(UnsafeAccessorKind.Constructor)]
-    [return: UnsafeAccessorType("Microsoft.Maui.Platforms.MacOS.Essentials.GeolocationImplementation, AMicrosoft.Maui.Platforms.MacOS.Essentials")]
+    [return: UnsafeAccessorType("Microsoft.Maui.Platforms.MacOS.Essentials.GeolocationImplementation, Microsoft.Maui.Platforms.MacOS.Essentials")]
     public extern static object CreateGeolocation();
 
     //[UnsafeAccessor(UnsafeAccessorKind.Constructor)]
@@ -76,7 +76,7 @@ public static class MacosDefaults
     //internal extern static object CreateGyroscope();
 
     [UnsafeAccessor(UnsafeAccessorKind.Constructor)]
-    [return: UnsafeAccessorType("Microsoft.Maui.Platforms.MacOS.Essentials.HapticFeedBackImplementation, Microsoft.Maui.Platforms.MacOS.Essentials")]
+    [return: UnsafeAccessorType("Microsoft.Maui.Platforms.MacOS.Essentials.HapticFeedbackImplementation, Microsoft.Maui.Platforms.MacOS.Essentials")]
     public extern static object CreateHapticFeedback();
 
     [UnsafeAccessor(UnsafeAccessorKind.Constructor)]

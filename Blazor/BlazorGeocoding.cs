@@ -29,12 +29,8 @@ public class BlazorGeocoding : IGeocoding
 
     public async Task<IEnumerable<Placemark>> GetPlacemarksAsync(double latitude, double longitude)
     {
-        var httpClient = BlazorEssentials.Provider.GetService<HttpClient>();
-        if (httpClient != null)
-            Client.BaseAddress = httpClient.BaseAddress;
-
         // Nominatim reverse geocoding URL
-        string url = $"https://nominatim.openstreetmap.org/reverse?format=json&lat={latitude}&lon={longitude}&addressdetails=1";
+        string url = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"https://nominatim.openstreetmap.org/reverse?format=json&lat={latitude}&lon={longitude}&addressdetails=1");
 
         // Make the request to the Nominatim API
         var response = await Client.GetStringAsync(url);
@@ -56,7 +52,7 @@ public class BlazorGeocoding : IGeocoding
                 CountryCode = data.Address?.CcountryCode ?? string.Empty,
                 Location = new Location() { Latitude = data.LatValue, Longitude = data.LonValue },
                 FeatureName = data.Address?.Road ?? string.Empty,
-                Locality = data.Address?.Village ?? string.Empty,
+                Locality = data.Address?.City ?? data.Address?.Town ?? data.Address?.Village ?? data.Address?.Hamlet ?? string.Empty,
                 PostalCode = data.Address?.Postcode ?? string.Empty
             }
         };
@@ -64,10 +60,6 @@ public class BlazorGeocoding : IGeocoding
 
     public async Task<IEnumerable<Location>> GetLocationsAsync(string address)
     {
-        var httpClient = BlazorEssentials.Provider.GetService<HttpClient>();
-        if (httpClient != null)
-            Client.BaseAddress = httpClient.BaseAddress;
-
         string url = $"https://nominatim.openstreetmap.org/search?format=json&q={Uri.EscapeDataString(address)}";
 
         // Make the request to the Nominatim API

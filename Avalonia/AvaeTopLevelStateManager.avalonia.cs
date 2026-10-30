@@ -26,8 +26,21 @@ public class AvaeTopLevelStateManager : IAvaloniaEssentialsPlatformProvider
             return;
 
         _active = topLevel;
+        topLevel.Closed += OnTopLevelClosed;
 
         ActiveTopLevelChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    void OnTopLevelClosed(object? sender, EventArgs e)
+    {
+        if (sender is TopLevel topLevel)
+            topLevel.Closed -= OnTopLevelClosed;
+
+        if (ReferenceEquals(_active, sender))
+        {
+            _active = null;
+            ActiveTopLevelChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     public TopLevel? GetTopLevel()

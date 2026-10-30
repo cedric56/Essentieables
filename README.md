@@ -1,4 +1,4 @@
-# Essentieables
+﻿# Essentieables
 
 Cross-host implementations of **.NET MAUI Essentials**-style APIs so the same ViewModels can run on **Avalonia**, **Blazor / WebAssembly**, and platform backends (Windows, Linux, macOS, mobile TFMs).
 
@@ -8,19 +8,19 @@ Contracts stay aligned with `Microsoft.Maui.Essentials` (`IGeolocation`, `IClipb
 
 ---
 
-**TFMs:** `net11.0` (Windows/Linux supported), `net11.0-browser`, `net11.0-ios`, `net11.0-android`, `net11.0-macos`, `net11.0-windows10.0.19041`
+**TFMs:** `net10.0` (Windows/Linux supported), `net10.0-browser`, `net10.0-ios`, `net10.0-android`, `net10.0-macos`, `net10.0-windows10.0.19041`
 
 ### Enable Avalonia feature pack
 
 ```xml
 <PropertyGroup>
-  <UseAvae>true</UseAvae>
+  <UseEssentieables>true</UseEssentieables>
 </PropertyGroup>
 ```
 
 Blazor sources are included automatically when the Web / Blazor WebAssembly SDK is used.
 
-**Host apps** that call `UseAvaeEssentials()` must restore **Avalonia** and **Avalonia.Controls.Maui.Essentials** at runtime (the library may use `PrivateAssets=compile` so pure ViewModel projects are not forced to take Avalonia).
+The sources of **Avalonia.Controls.Maui.Essentials** are compiled into the host app: do **not** also reference the `Avalonia.Controls.Maui.Essentials` package, or the types will be defined twice (CS0436).
 
 ---
 
@@ -29,21 +29,21 @@ Blazor sources are included automatically when the Web / Blazor WebAssembly SDK 
 ### Avalonia
 
 ```csharp
-services.UseAvaeEssentials();
+services.UseEssentieables();
 ```
 OR
 
-```chsarp
+```csharp
  public static AppBuilder BuildAvaloniaApp()
         => AppBuilder.Configure<App>()
-            .UseAvaeEssentials()
+            .UseEssentieables()
             .UsePlatformDetect();
 ```
 
 ### Blazor
 
 ```csharp
-services.UseAvaeBlazorEssentials();
+services.UseBlazorEssentieables();
 ```
 
 `BlazorEssentials.js` is automatically copied in `wwwroot`, and call `InitializeAsync()`.

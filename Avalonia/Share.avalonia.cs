@@ -1,4 +1,4 @@
-using Essentieables;
+﻿using Essentieables;
 using Avalonia.Controls.Maui.Essentials;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.ApplicationModel.DataTransfer;
@@ -61,6 +61,9 @@ partial class OriginalShareImplementation(AvaeTopLevelStateManager platformProvi
         foreach (var file in request.Files ?? [])
             storageFiles.Add(await StorageFile.GetFileFromPathAsync(file.FullPath));
 
+        if (storageFiles.Count == 0)
+            return;
+
         var hwnd = platformProvider.GetActiveWindowHandle(false);
         var dataTransferManager = OriginalDataTransferManagerHelper.GetDataTransferManager(hwnd);
 
@@ -70,9 +73,6 @@ partial class OriginalShareImplementation(AvaeTopLevelStateManager platformProvi
 
         void ShareTextHandler(DataTransferManager sender, DataRequestedEventArgs e)
         {
-            if (storageFiles.Count == 0)
-                return;
-
             var newRequest = e.Request;
 
             newRequest.Data.SetStorageItems(storageFiles.ToArray());

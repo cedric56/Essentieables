@@ -1,5 +1,4 @@
-﻿using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.JSInterop;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.ApplicationModel.DataTransfer;
@@ -14,7 +13,7 @@ using System.Threading.Tasks;
 
 namespace Essentieables;
 
-public static class BlazorEssentieables
+public static class BlazorEssentials
 {
     public static void UseBlazorEssentieables(this IServiceCollection services)
     {
@@ -74,7 +73,7 @@ public static class BlazorEssentieables
           <script>
             if (window.opener) {
               window.opener.postMessage(
-                { type: "web-authenticator-complete" },
+                { type: "web-authenticator-complete", url: window.location.href },
                 window.location.origin
               );
               window.close();
@@ -99,7 +98,7 @@ public static class BlazorEssentieables
         if (!IsInitialized)
             throw new InvalidOperationException(
                 "Blazor Essentials is not initialized. Call " +
-                "'await BlazorEssentials.InitializeAsync(js, moduleurl)' during app startup " +
+                "'await BlazorEssentials.InitializeAsync(serviceProvider)' during app startup " +
                 "before using Essentials APIs.");
     }
 
@@ -109,7 +108,8 @@ public static class BlazorEssentieables
 
         var js = provider.GetRequiredService<IJSRuntime>();
 
-        Module?.DisposeAsync();
+        if (Module is not null)
+            await Module.DisposeAsync();
         Module = await InvokeCoreAsync(js);
         if (Module == null)
             return;

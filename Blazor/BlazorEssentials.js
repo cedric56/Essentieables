@@ -1444,13 +1444,13 @@ export function authenticate(url) {
 				clearTimeout(timeout);
 			};
 
-			const finish = (error) => {
+			const finish = (error, callbackUrl) => {
 				if (finished) return;
 				finished = true;
 				cleanup();
 
 				if (error) reject(error);
-				else resolve(true);
+				else resolve(callbackUrl ?? null);
 			};
 
 			const onMessage = (event) => {
@@ -1461,7 +1461,7 @@ export function authenticate(url) {
 					return;
 
 				if (event.data?.type === "web-authenticator-complete")
-					finish();
+					finish(null, event.data.url);
 			};
 
 			window.addEventListener("message", onMessage);

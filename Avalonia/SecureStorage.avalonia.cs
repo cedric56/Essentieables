@@ -1,4 +1,4 @@
-using Microsoft.Maui.ApplicationModel;
+﻿using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Storage;
 using System;
 using System.IO;
@@ -121,7 +121,6 @@ class OriginalUnpackagedSecureStorageImplementation
     private static readonly string AppSecureStoragePath =
         Path.Combine(
             FileSystem.AppDataDirectory,
-            "..",
             "Settings",
             "securestorage.dat");
 

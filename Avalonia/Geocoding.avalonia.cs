@@ -1,4 +1,4 @@
-using Microsoft.Maui.Devices.Sensors;
+﻿using Microsoft.Maui.Devices.Sensors;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -27,7 +27,7 @@ class AvaeGeocoding : IGeocoding
     public async Task<IEnumerable<Placemark>> GetPlacemarksAsync(double latitude, double longitude)
     {
         // Nominatim reverse geocoding URL
-        string url = $"https://nominatim.openstreetmap.org/reverse?format=json&lat={latitude}&lon={longitude}&addressdetails=1";
+        string url = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"https://nominatim.openstreetmap.org/reverse?format=json&lat={latitude}&lon={longitude}&addressdetails=1");
 
         // Make the request to the Nominatim API
         var response = await Client.GetStringAsync(url);
@@ -49,7 +49,7 @@ class AvaeGeocoding : IGeocoding
                 CountryCode = data.Address?.CcountryCode ?? string.Empty,
                 Location = new Location() { Latitude = data.LatValue, Longitude = data.LonValue },
                 FeatureName = data.Address?.Road ?? string.Empty,
-                Locality = data.Address?.Village ?? string.Empty,
+                Locality = data.Address?.City ?? data.Address?.Town ?? data.Address?.Village ?? data.Address?.Hamlet ?? string.Empty,
                 PostalCode = data.Address?.Postcode ?? string.Empty
             }
         };

@@ -1,5 +1,7 @@
-using Microsoft.Maui.ApplicationModel;
+﻿using Microsoft.Maui.ApplicationModel;
+#if WINDOWS
 using Microsoft.UI.Xaml;
+#endif
 using System;
 using System.Collections.Generic;
 using System.Runtime.Versioning;

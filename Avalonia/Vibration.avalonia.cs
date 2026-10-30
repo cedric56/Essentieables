@@ -1,4 +1,4 @@
-using Microsoft.Maui.ApplicationModel;
+﻿using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Devices;
 using System;
 using System.Runtime.Versioning;
@@ -11,10 +11,7 @@ namespace Essentieables;
 partial class OriginalVibrationImplementation : IVibration
 {
     public bool IsSupported
-       => ApiInformation.IsTypePresent("Windows.Phone.Devices.Notification.VibrationDevice") && DefaultDevice != null;
-
-    static VibrationDevice DefaultDevice =>
-        throw new NotImplementedException("WINUI"); //VibrationDevice.GetDefault();
+       => false; // Windows.Phone.Devices.Notification.VibrationDevice is not available to desktop apps.
 
 
     public void Vibrate()

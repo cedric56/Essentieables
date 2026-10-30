@@ -101,7 +101,7 @@ public static class AvaloniaExtensions
 #endif
                 OperatingSystem.IsWindowsVersionAtLeast(10, 0, 14393, 0) ? new AvaeGeolocation() : null!,
                 OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalGyroscopeImplementation() : null!,
-                hapticFeedback,
+                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 15063, 0) ? new OriginalHapticFeedbackImplementation() : hapticFeedback,
                 OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalLauncherImplementation() : null!,
                 OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalMagnetometerImplementation() : null!,
                 OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalMapImplementation() : null!,
@@ -163,9 +163,9 @@ public static class AvaloniaExtensions
         }
         // macOS: register the implementations supplied by the macOS-specific
         // integration. This branch is compiled only when MACOS is defined.
+#if MACOS
         else if (OperatingSystem.IsMacOS())
         {
-#if MACOS
             // Avalonia/MAUI interop may otherwise trigger cross-thread warnings
             // in APIs used by this integration.
             NSApplication.CheckForIllegalCrossThreadCalls = false;
@@ -207,8 +207,8 @@ public static class AvaloniaExtensions
                 (Microsoft.Maui.Devices.IVibration)MacosDefaults.CreateVibration(),
                 webAuthenticator,
                 () => Microsoft.Maui.ApplicationModel.VersionTracking.Default);
-#endif
         }
+#endif
         // Browser: register only the services supported by this environment.
         // Unsupported APIs are passed as null so SetDefaults can handle them.
         else if (OperatingSystem.IsBrowser())
@@ -249,7 +249,8 @@ public static class AvaloniaExtensions
                 null!,
                 null!,
                 webAuthenticator,
-                () => Microsoft.Maui.ApplicationModel.VersionTracking.Default);
+                // No IAppInfo here: VersionTracking.Default would throw NotImplementedInReferenceAssemblyException.
+                () => null!);
         }
         // Fallback: register the subset of services supported by the current
         // platform, leaving unsupported implementations unset.
@@ -291,7 +292,8 @@ public static class AvaloniaExtensions
                 null!,
                 null!,
                 webAuthenticator,
-                () => Microsoft.Maui.ApplicationModel.VersionTracking.Default);
+                // No IAppInfo here: VersionTracking.Default would throw NotImplementedInReferenceAssemblyException.
+                () => null!);
         }
 
         // Expose the Avae dispatcher through MAUI's dispatcher abstraction.
