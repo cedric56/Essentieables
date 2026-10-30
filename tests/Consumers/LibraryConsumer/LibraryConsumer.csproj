@@ -4,6 +4,7 @@
        compile for every target framework a consumer may use. CI passes the TFM for its platform:
        ConsumerTargetFrameworks="net10.0;net10.0-android" set as an environment variable -->
   <PropertyGroup>
+    <EssentieablesAvaloniaConsumer>true</EssentieablesAvaloniaConsumer>
     <TargetFrameworks>net10.0</TargetFrameworks>
     <TargetFrameworks Condition="'$(ConsumerTargetFrameworks)' != ''">$(ConsumerTargetFrameworks)</TargetFrameworks>
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24</SupportedOSPlatformVersion>

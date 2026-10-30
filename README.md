@@ -90,9 +90,21 @@ Existing implementations are reused rather than rewritten:
    them, with CS0436 warnings for the Avalonia.Controls.Maui.Essentials types. To compile them once,
    set `<EssentieablesHost>None</EssentieablesHost>` in the projects that do not call `UseEssentieables()`.
 
-   The extra packages the Avalonia sources need (Avalonia.Controls.WebView, the WinRT contracts,
-   maui-labs Linux/macOS) are added automatically to projects that reference an `Avalonia*` package
-   directly: you do not need to list them.
+   The project that receives the Avalonia sources must also reference the packages they use (a
+   package cannot add them for you: NuGet ignores package targets while restoring). The build stops
+   with **ESS0001** and lists the missing ones:
+
+   ```xml
+   <ItemGroup>
+     <PackageReference Include="Avalonia.Controls.WebView" Version="12.1.1" />
+     <PackageReference Include="WindowsContracts.Net.Foundation.UniversalApiContract" Version="5.19041.10" PrivateAssets="compile" />
+     <PackageReference Include="Microsoft.Maui.Platforms.Linux.Gtk4.Essentials" Version="0.1.0-preview.12.26421.1" />
+     <!-- net10.0-macos only -->
+     <PackageReference Include="Microsoft.Maui.Platforms.MacOS.Essentials" Version="0.1.0-preview.12.26368.2"
+                       ExcludeAssets="analyzers"
+                       Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'macos'" />
+   </ItemGroup>
+   ```
 
 2. Register the services on the UI thread, once Avalonia is set up (the UI dispatcher is captured):
 

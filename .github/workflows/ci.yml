@@ -89,28 +89,15 @@ jobs:
           # separate properties (MSB1006). MSBuild reads environment variables as properties.
           EssentieablesTargetFrameworks: ${{ matrix.lib-tfms }}
 
-      # Known limitation (ESS0001): the Avalonia dependencies are added by the package's own .targets,
-      # which NuGet only imports once a first restore has generated obj/*.nuget.g.targets.
-      # A clean checkout therefore needs two restores, exactly like a user's first build.
-      - name: Restore Avalonia consumers (twice, see ESS0001)
-        run: |
-          foreach ($pass in 1, 2) {
-            dotnet restore tests/Consumers/LibraryConsumer
-            dotnet restore tests/Consumers/AvaloniaSmoke
-          }
-        env:
-          ConsumerTargetFrameworks: ${{ matrix.consumer-tfms }}
-
       - name: Consumer compiles the injected sources
         run: >
           dotnet build tests/Consumers/LibraryConsumer
           -c Release
-          --no-restore
         env:
           ConsumerTargetFrameworks: ${{ matrix.consumer-tfms }}
 
       - name: Avalonia headless smoke test
-        run: dotnet run --project tests/Consumers/AvaloniaSmoke -c Release --no-restore
+        run: dotnet run --project tests/Consumers/AvaloniaSmoke -c Release
 
       - name: Blazor WebAssembly consumer
         if: matrix.blazor

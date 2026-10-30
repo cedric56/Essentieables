@@ -1,4 +1,4 @@
-<Project>
+﻿<Project>
   <!-- Consumer projects restore the Essentieables package produced by the CI "pack" step
        (dotnet pack -o artifacts/packages -p:Version=$(EssentieablesVersion)). -->
   <PropertyGroup>
@@ -9,4 +9,14 @@
     <IsPackable>false</IsPackable>
     <AvaloniaVersion>12.1.4</AvaloniaVersion>
   </PropertyGroup>
+
+  <!-- Packages the Essentieables Avalonia sources need (ESS0001 lists the missing ones). -->
+  <ItemGroup Condition="'$(EssentieablesAvaloniaConsumer)' == 'true'">
+    <PackageReference Include="Avalonia.Controls.WebView" Version="12.1.1" />
+    <PackageReference Include="WindowsContracts.Net.Foundation.UniversalApiContract" Version="5.19041.10" PrivateAssets="compile" />
+    <PackageReference Include="Microsoft.Maui.Platforms.Linux.Gtk4.Essentials" Version="0.1.0-preview.12.26421.1" />
+    <PackageReference Include="Microsoft.Maui.Platforms.MacOS.Essentials" Version="0.1.0-preview.12.26368.2"
+                      ExcludeAssets="analyzers"
+                      Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'macos'" />
+  </ItemGroup>
 </Project>

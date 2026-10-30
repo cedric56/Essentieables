@@ -3,6 +3,7 @@
   <!-- Runs UseEssentieables() in a headless Avalonia app on the CI host OS (Windows, Linux or macOS)
        and exercises the services every desktop host must provide. -->
   <PropertyGroup>
+    <EssentieablesAvaloniaConsumer>true</EssentieablesAvaloniaConsumer>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
   </PropertyGroup>

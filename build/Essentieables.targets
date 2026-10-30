@@ -25,33 +25,11 @@
   </PropertyGroup>
 
   <!--
-    Packages the Avalonia sources need. PackageReference items must exist when NuGet restores, so this
-    detection cannot wait for resolved references: it looks at the project's own Avalonia package references.
+    The Avalonia sources need a few packages (see _EssentieablesRequiredPackage below). They cannot be added
+    from here: NuGet restores with ExcludeRestorePackageImports=true, so package .targets are never imported
+    during restore and any PackageReference they add is ignored. The app references them itself, and
+    ESS0001 lists the ones that are missing.
   -->
-  <ItemGroup Condition="'$(EssentieablesHost)' == 'Avalonia' or ('$(EssentieablesHost)' == '' and (
-                          '@(PackageReference->AnyHaveMetadataValue('Identity', 'Avalonia'))' == 'true' or
-                          '@(PackageReference->AnyHaveMetadataValue('Identity', 'Avalonia.Desktop'))' == 'true' or
-                          '@(PackageReference->AnyHaveMetadataValue('Identity', 'Avalonia.Android'))' == 'true' or
-                          '@(PackageReference->AnyHaveMetadataValue('Identity', 'Avalonia.iOS'))' == 'true' or
-                          '@(PackageReference->AnyHaveMetadataValue('Identity', 'Avalonia.Browser'))' == 'true'))">
-    <_EssentieablesPackage Include="Avalonia.Controls.WebView" PackageVersion="12.1.1" />
-    <_EssentieablesPackage Include="WindowsContracts.Net.Foundation.UniversalApiContract" PackageVersion="5.19041.10" PrivateAssets="compile" />
-    <_EssentieablesPackage Include="Microsoft.Maui.Platforms.Linux.Gtk4.Essentials" PackageVersion="0.1.0-preview.12.26421.1" />
-    <_EssentieablesPackage Include="Microsoft.Maui.Platforms.MacOS.Essentials" PackageVersion="0.1.0-preview.12.26368.2"
-                           PrivateAssets="compile" ExcludeAssets="analyzers"
-                           Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'macos'" />
-    <!-- Packages the project already references keep the project's own version. -->
-    <_EssentieablesPackage Remove="@(PackageReference)" />
-  </ItemGroup>
-
-  <!-- Central package management forbids Version on PackageReference (NU1008): use VersionOverride there. -->
-  <ItemGroup Condition="'$(ManagePackageVersionsCentrally)' == 'true'">
-    <PackageReference Include="@(_EssentieablesPackage)" VersionOverride="%(PackageVersion)" />
-  </ItemGroup>
-  <ItemGroup Condition="'$(ManagePackageVersionsCentrally)' != 'true'">
-    <PackageReference Include="@(_EssentieablesPackage)" Version="%(PackageVersion)" />
-  </ItemGroup>
-
   <Target Name="_EssentieablesAddSources" AfterTargets="ResolveAssemblyReferences">
     <PropertyGroup>
       <_EssentieablesAvalonia Condition="'$(EssentieablesHost)' == 'Avalonia'">true</_EssentieablesAvalonia>
@@ -60,11 +38,19 @@
       <_EssentieablesFlavorExcluded Condition="'$(_EssentieablesIsBrowser)' != 'true'">Browser</_EssentieablesFlavorExcluded>
     </PropertyGroup>
 
-    <!-- The Avalonia sources need the packages added above; they are missing when Avalonia only comes
-         through a ProjectReference, or on the very first restore (this file is not imported yet). -->
-    <Error Condition="'$(_EssentieablesAvalonia)' == 'true' and '@(ReferencePath->AnyHaveMetadataValue('Filename', 'Avalonia.Controls.WebView'))' != 'true'"
+    <ItemGroup Condition="'$(_EssentieablesAvalonia)' == 'true'">
+      <_EssentieablesRequiredPackage Include="Avalonia.Controls.WebView" />
+      <_EssentieablesRequiredPackage Include="WindowsContracts.Net.Foundation.UniversalApiContract" />
+      <_EssentieablesRequiredPackage Include="Microsoft.Maui.Platforms.Linux.Gtk4.Essentials" />
+      <_EssentieablesRequiredPackage Include="Microsoft.Maui.Platforms.MacOS.Essentials"
+                                     Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'macos'" />
+      <_EssentieablesResolvedPackage Include="@(ReferencePath->'%(NuGetPackageId)')" />
+      <_EssentieablesMissingPackage Include="@(_EssentieablesRequiredPackage)" Exclude="@(_EssentieablesResolvedPackage)" />
+    </ItemGroup>
+
+    <Error Condition="'@(_EssentieablesMissingPackage)' != ''"
            Code="ESS0001"
-           Text="Essentieables: the Avalonia dependencies are not restored. Run the restore again, or add &lt;EssentieablesHost&gt;Avalonia&lt;/EssentieablesHost&gt; if Avalonia is only referenced through another project (or None to skip the Avalonia sources)." />
+           Text="Essentieables: the Avalonia sources need these packages, add them to $(MSBuildProjectFile): @(_EssentieablesMissingPackage, ', '). To keep the Avalonia sources out of this project, set &lt;EssentieablesHost&gt;None&lt;/EssentieablesHost&gt;." />
 
     <ItemGroup Condition="'$(_EssentieablesAvalonia)' == 'true'">
       <Compile Include="$(_EssentieablesSources)Avalonia\**\*.cs" />
