@@ -6,7 +6,7 @@ namespace Essentieables;
 
 
 /// <summary>Screenshots of the page cannot be captured from within the browser sandbox.</summary>
-public class BlazorScreenshot : IScreenshot
+internal class BlazorScreenshot : IScreenshot
 {
     public bool IsCaptureSupported => false;
 

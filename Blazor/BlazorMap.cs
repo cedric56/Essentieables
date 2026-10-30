@@ -32,7 +32,7 @@ using System.Threading.Tasks;
 namespace Essentieables;
 
 /// <summary>Map apps cannot be launched from the browser backend.</summary>
-public class BlazorMap(BlazorBrowser browser) : IMap
+internal class BlazorMap(BlazorBrowser browser) : IMap
 {
     // Argument checks run before anything is launched and throw synchronously, as MAUI's
     // MapImplementation does (ArgumentNullException for a null placemark or options).

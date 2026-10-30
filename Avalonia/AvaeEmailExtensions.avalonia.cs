@@ -15,7 +15,7 @@ namespace Essentieables;
 /// <summary>
 /// Provides extension methods for sending emails with attachments and converting emails to different formats.
 /// </summary>
-public static class AvaeEmailExtensions
+internal static class AvaeEmailExtensions
 {
 
     private const string CrLf = "\r\n";

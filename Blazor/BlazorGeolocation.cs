@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 namespace Essentieables;
 
 /// <summary>Geolocation backed by navigator.geolocation (permission-prompted by the browser).</summary>
-public sealed class BlazorGeolocation : IGeolocation
+internal sealed class BlazorGeolocation : IGeolocation
 {
     public sealed record Payload(double Latitude, double Longitude, double? Accuracy,
         double? Altitude, double? AltitudeAccuracy, double? Heading, double? Speed, double Timestamp);

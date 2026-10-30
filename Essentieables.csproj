@@ -9,8 +9,9 @@
       net10.0-macos;
       net10.0-windows10.0.19041
     </TargetFrameworks>
-    <!-- CI builds one platform per runner: -p:EssentieablesTargetFrameworks="net10.0;net10.0-android" -->
-    <TargetFrameworks Condition="'$(EssentieablesTargetFrameworks)' != ''">$(EssentieablesTargetFrameworks)</TargetFrameworks>
+    <!-- CI builds one platform per runner: -p:EssentieablesTargetFrameworks=net10.0,net10.0-android
+         (commas: on the command line a ';' separates properties, MSB1006) -->
+    <TargetFrameworks Condition="'$(EssentieablesTargetFrameworks)' != ''">$(EssentieablesTargetFrameworks.Replace(',', ';'))</TargetFrameworks>
     <Nullable>enable</Nullable>
     <IsLinuxOS Condition="$([MSBuild]::IsOSPlatform('linux'))">true</IsLinuxOS>
     <IsWindowsOS>$([MSBuild]::IsOSPlatform('windows'))</IsWindowsOS>
@@ -39,25 +40,19 @@
 
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="\" />
+    <!-- buildTransitive/: the app usually gets the package through its ViewModels project.
+         The targets detect Avalonia/Blazor, so other projects in the chain are not affected. -->
     <None Include="build\Essentieables.targets" Pack="true" PackagePath="buildTransitive\" />
   </ItemGroup>
 
+  <!-- Host sources are compiled by the consuming app, not by this library. They are packed once
+       under src/ (not once per TFM): build/Essentieables.targets picks them from there. -->
   <ItemGroup>
-    <Compile Remove="Blazor\**\*.*" />
-    <TfmSpecificPackageFile Include="Blazor\**\*.*">
-      <PackagePath>lib\$(TargetFramework)\Blazor\%(RecursiveDir)%(Filename)%(Extension)</PackagePath>
-      <PackageCopyToOutput>true</PackageCopyToOutput>
-    </TfmSpecificPackageFile>
-    <Compile Remove="Avalonia\**\*.*" />
-    <TfmSpecificPackageFile Include="Avalonia\**\*.*">
-      <PackagePath>lib\$(TargetFramework)\Avalonia\%(RecursiveDir)%(Filename)%(Extension)</PackagePath>
-      <PackageCopyToOutput>true</PackageCopyToOutput>
-    </TfmSpecificPackageFile>
-    <Compile Remove="Avalonia.Controls.Maui.Essentials\**\*.*" />
-    <TfmSpecificPackageFile Include="Avalonia.Controls.Maui.Essentials\**\*.*">
-      <PackagePath>lib\$(TargetFramework)\Avalonia.Controls.Maui.Essentials\%(RecursiveDir)%(Filename)%(Extension)</PackagePath>
-      <PackageCopyToOutput>true</PackageCopyToOutput>
-    </TfmSpecificPackageFile>
+    <Compile Remove="Blazor\**;Avalonia\**;Avalonia.Controls.Maui.Essentials\**" />
+    <None Remove="Blazor\**;Avalonia\**;Avalonia.Controls.Maui.Essentials\**" />
+    <None Include="Blazor\**\*.cs;Blazor\**\*.js" Pack="true" PackagePath="src\Blazor\%(RecursiveDir)" />
+    <None Include="Avalonia\**\*.cs" Pack="true" PackagePath="src\Avalonia\%(RecursiveDir)" />
+    <None Include="Avalonia.Controls.Maui.Essentials\**\*.cs" Pack="true" PackagePath="src\Avalonia.Controls.Maui.Essentials\%(RecursiveDir)" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(IsWindowsTFM)' == 'true'">

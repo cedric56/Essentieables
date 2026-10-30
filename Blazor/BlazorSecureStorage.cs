@@ -22,7 +22,7 @@ namespace Essentieables;
 /// removal to actually finish in JS first, so callers never observe a stale
 /// value mid-removal.
 /// </summary>
-public sealed class BlazorSecureStorage : ISecureStorage
+internal sealed class BlazorSecureStorage : ISecureStorage
 {
     private const string KeyPrefix = "maui:securestorage:";
 

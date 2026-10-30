@@ -1,59 +1,94 @@
-﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+﻿<Project>
+  <!--
+    Imported from buildTransitive/: an app that gets Essentieables through a ProjectReference (for example
+    App -> ViewModels -> Essentieables) must receive the sources too. Detection keeps that safe: projects
+    that are neither Avalonia nor Blazor (the ViewModels library) get nothing.
+
+      Blazor   : project uses Microsoft.NET.Sdk.Web or Microsoft.NET.Sdk.BlazorWebAssembly
+      Avalonia : project references Avalonia (directly, transitively or via a ProjectReference)
+
+    To override detection: <EssentieablesHost>Avalonia</EssentieablesHost>, Blazor, or None.
+    In a multi-project Avalonia app (shared App library + Desktop/Android/iOS heads), set None in the
+    projects that do not call UseEssentieables(), so the public types are not compiled twice (CS0436).
+
+    The sources are added inside targets, after reference resolution: they are compiled and seen by
+    IntelliSense, but never listed in Solution Explorer, so no Visible="false" is needed.
+  -->
   <PropertyGroup>
-    <!-- The injected sources are identical in every lib/<tfm> folder, and the consumer's own TFM
-         (net10.0-windows10.0.19041.0, net10.0-android35.0, net11.0-ios...) rarely matches a folder name
-         exactly, which silently compiled nothing. Always read them from the net10.0 folder;
-         platform code is selected by the consumer's #if symbols. -->
-    <MyLibTargetFramework>net10.0</MyLibTargetFramework>
+    <!-- Backward compatibility with the former opt-in property. -->
+    <EssentieablesHost Condition="'$(EssentieablesHost)' == '' and '$(UseEssentieables)' == 'true'">Avalonia</EssentieablesHost>
+    <_EssentieablesSources>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..', 'src'))</_EssentieablesSources>
+    <_EssentieablesIsBrowser Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'browser' or '$(RuntimeIdentifier)' == 'browser-wasm'">true</_EssentieablesIsBrowser>
+
+    <_EssentieablesBlazor Condition="'$(EssentieablesHost)' == 'Blazor'">true</_EssentieablesBlazor>
+    <_EssentieablesBlazor Condition="'$(EssentieablesHost)' == '' and ('$(UsingMicrosoftNETSdkWeb)' == 'true' or '$(UsingMicrosoftNETSdkBlazorWebAssembly)' == 'true')">true</_EssentieablesBlazor>
   </PropertyGroup>
-  
-  <ItemGroup Condition="'$(UsingMicrosoftNETSdkWeb)' == 'true' OR '$(UsingMicrosoftNETSdkBlazorWebAssembly)' == 'true'">
-    <!--<PackageReference Include="Microsoft.AspNetCore.WebUtilities" Version="10.0.12" />-->
-    <Compile Include="$(MSBuildThisFileDirectory)..\lib\$(MyLibTargetFramework)\Blazor\**\*.cs" Visible="false" />
+
+  <!--
+    Packages the Avalonia sources need. PackageReference items must exist when NuGet restores, so this
+    detection cannot wait for resolved references: it looks at the project's own Avalonia package references.
+  -->
+  <ItemGroup Condition="'$(EssentieablesHost)' == 'Avalonia' or ('$(EssentieablesHost)' == '' and (
+                          '@(PackageReference->AnyHaveMetadataValue('Identity', 'Avalonia'))' == 'true' or
+                          '@(PackageReference->AnyHaveMetadataValue('Identity', 'Avalonia.Desktop'))' == 'true' or
+                          '@(PackageReference->AnyHaveMetadataValue('Identity', 'Avalonia.Android'))' == 'true' or
+                          '@(PackageReference->AnyHaveMetadataValue('Identity', 'Avalonia.iOS'))' == 'true' or
+                          '@(PackageReference->AnyHaveMetadataValue('Identity', 'Avalonia.Browser'))' == 'true'))">
+    <_EssentieablesPackage Include="Avalonia.Controls.WebView" PackageVersion="12.1.1" />
+    <_EssentieablesPackage Include="WindowsContracts.Net.Foundation.UniversalApiContract" PackageVersion="5.19041.10" PrivateAssets="compile" />
+    <_EssentieablesPackage Include="Microsoft.Maui.Platforms.Linux.Gtk4.Essentials" PackageVersion="0.1.0-preview.12.26421.1" />
+    <_EssentieablesPackage Include="Microsoft.Maui.Platforms.MacOS.Essentials" PackageVersion="0.1.0-preview.12.26368.2"
+                           PrivateAssets="compile" ExcludeAssets="analyzers"
+                           Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'macos'" />
+    <!-- Packages the project already references keep the project's own version. -->
+    <_EssentieablesPackage Remove="@(PackageReference)" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(UseEssentieables)' == 'true'">
-    <PackageReference Include="WindowsContracts.Net.Foundation.UniversalApiContract" Version="5.19041.10">
-      <PrivateAssets>compile</PrivateAssets>
-    </PackageReference>
-    <PackageReference Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'macos'"
-                     Include="Microsoft.Maui.Platforms.MacOS.Essentials" Version="0.1.0-preview.12.26368.2" >
-      <PrivateAssets>compile</PrivateAssets>
-      <ExcludeAssets>analyzers</ExcludeAssets>
-    </PackageReference>
-    <PackageReference Include="Microsoft.Maui.Platforms.Linux.Gtk4.Essentials" Version="0.1.0-preview.12.26421.1">
-      <!--<PrivateAssets>compile</PrivateAssets>
-      <ExcludeAssets>analyzers</ExcludeAssets>-->
-    </PackageReference>
-    <PackageReference Include="Avalonia.Controls.WebView" Version="12.1.1"/>
-    
-    <Compile Include="$(MSBuildThisFileDirectory)..\lib\$(MyLibTargetFramework)\Avalonia\**\*.avalonia.cs" Visible="false" />
-      <Compile
-        Include="$(MSBuildThisFileDirectory)..\lib\$(MyLibTargetFramework)\Avalonia.Controls.Maui.Essentials\**\*.cs"
-        Exclude="$(MSBuildThisFileDirectory)..\lib\$(MyLibTargetFramework)\Avalonia.Controls.Maui.Essentials\**\*.Default.cs;$(MSBuildThisFileDirectory)..\lib\$(MyLibTargetFramework)\Avalonia.Controls.Maui.Essentials\**\*.Browser.cs"
-        Visible="false" />
+  <!-- Central package management forbids Version on PackageReference (NU1008): use VersionOverride there. -->
+  <ItemGroup Condition="'$(ManagePackageVersionsCentrally)' == 'true'">
+    <PackageReference Include="@(_EssentieablesPackage)" VersionOverride="%(PackageVersion)" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(ManagePackageVersionsCentrally)' != 'true'">
+    <PackageReference Include="@(_EssentieablesPackage)" Version="%(PackageVersion)" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(UseEssentieables)' == 'true' AND
-    $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) != 'browser'">
-    <Compile Include="$(MSBuildThisFileDirectory)..\lib\$(MyLibTargetFramework)\Avalonia.Controls.Maui.Essentials\**\*.Default.cs"
-             Visible="false" />
-  </ItemGroup>
+  <Target Name="_EssentieablesAddSources" AfterTargets="ResolveAssemblyReferences">
+    <PropertyGroup>
+      <_EssentieablesAvalonia Condition="'$(EssentieablesHost)' == 'Avalonia'">true</_EssentieablesAvalonia>
+      <_EssentieablesAvalonia Condition="'$(EssentieablesHost)' == '' and '@(ReferencePath->AnyHaveMetadataValue('Filename', 'Avalonia.Base'))' == 'true'">true</_EssentieablesAvalonia>
+      <_EssentieablesFlavorExcluded Condition="'$(_EssentieablesIsBrowser)' == 'true'">Default</_EssentieablesFlavorExcluded>
+      <_EssentieablesFlavorExcluded Condition="'$(_EssentieablesIsBrowser)' != 'true'">Browser</_EssentieablesFlavorExcluded>
+    </PropertyGroup>
 
-  <ItemGroup Condition="'$(UseEssentieables)' == 'true' AND
-    $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'browser'">
-    <Compile Include="$(MSBuildThisFileDirectory)..\lib\$(MyLibTargetFramework)\Avalonia.Controls.Maui.Essentials\**\*.Browser.cs"
-             Visible="false" />
-  </ItemGroup>
+    <!-- The Avalonia sources need the packages added above; they are missing when Avalonia only comes
+         through a ProjectReference, or on the very first restore (this file is not imported yet). -->
+    <Error Condition="'$(_EssentieablesAvalonia)' == 'true' and '@(ReferencePath->AnyHaveMetadataValue('Filename', 'Avalonia.Controls.WebView'))' != 'true'"
+           Code="ESS0001"
+           Text="Essentieables: the Avalonia dependencies are not restored. Run the restore again, or add &lt;EssentieablesHost&gt;Avalonia&lt;/EssentieablesHost&gt; if Avalonia is only referenced through another project (or None to skip the Avalonia sources)." />
 
-  <Target Name="CopyBlazorAssets" BeforeTargets="BeforeCompile"
-        Condition="('$(UsingMicrosoftNETSdkWeb)' == 'true' OR '$(UsingMicrosoftNETSdkBlazorWebAssembly)' == 'true') AND Exists('$(MSBuildProjectDirectory)\wwwroot')">
-    <ItemGroup>
-      <_Assets Include="$(MSBuildThisFileDirectory)..\lib\$(MyLibTargetFramework)\Blazor\BlazorEssentials.js" />
+    <ItemGroup Condition="'$(_EssentieablesAvalonia)' == 'true'">
+      <Compile Include="$(_EssentieablesSources)Avalonia\**\*.cs" />
+      <!-- *.Default.cs (file storage) or *.Browser.cs (localStorage), as in Avalonia.Controls.Maui.Essentials -->
+      <Compile Include="$(_EssentieablesSources)Avalonia.Controls.Maui.Essentials\**\*.cs"
+               Exclude="$(_EssentieablesSources)Avalonia.Controls.Maui.Essentials\**\*.$(_EssentieablesFlavorExcluded).cs" />
     </ItemGroup>
-    <Copy SourceFiles="@(_Assets)"
+
+    <ItemGroup Condition="'$(_EssentieablesBlazor)' == 'true'">
+      <Compile Include="$(_EssentieablesSources)Blazor\**\*.cs" />
+    </ItemGroup>
+  </Target>
+
+  <!-- Blazor: the JS module is imported from ./BlazorEssentials.js, so it is copied to wwwroot/. -->
+  <Target Name="_EssentieablesCopyBlazorAssets" BeforeTargets="BeforeBuild"
+          Condition="'$(_EssentieablesBlazor)' == 'true' and Exists('$(MSBuildProjectDirectory)\wwwroot')">
+    <Copy SourceFiles="$(_EssentieablesSources)Blazor\BlazorEssentials.js"
           DestinationFolder="$(MSBuildProjectDirectory)\wwwroot\"
-          SkipUnchangedFiles="true"
-          Condition="Exists('@(_Assets)')" />
+          SkipUnchangedFiles="true" />
+    <!-- wwwroot/ is globbed at evaluation: on the first build the copied file is not a Content item yet,
+         so it would only be served from the second build on. -->
+    <ItemGroup>
+      <Content Remove="wwwroot\BlazorEssentials.js" />
+      <Content Include="wwwroot\BlazorEssentials.js" />
+    </ItemGroup>
   </Target>
 </Project>

@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 
 namespace Essentieables;
 
-public class BlazorFileResult : FileResult
+internal class BlazorFileResult : FileResult
 {
     public byte[] Data { get; private set; }
     public BlazorFileResult(string fullPath, string contentType, byte[] data) : base(fullPath, contentType)
@@ -14,7 +14,7 @@ public class BlazorFileResult : FileResult
     }
 }
 
-public class BlazorShareFile : ShareFile
+internal class BlazorShareFile : ShareFile
 {
     public byte[]? Data { get; private set; }
 

@@ -18,7 +18,7 @@ using Launcher = Windows.System.Launcher;
 namespace Essentieables;
 
 [SupportedOSPlatform("windows10.0.10240")]
-public class AvaeMediaPicker(AvaeTopLevelStateManager topLevelStateManager, AvaloniaMediaPicker picker) : IMediaPicker
+internal class AvaeMediaPicker(AvaeTopLevelStateManager topLevelStateManager, AvaloniaMediaPicker picker) : IMediaPicker
 {
     public class AvaeFileResult(string fullPath, string contentType) : FileResult(fullPath, contentType), IAvaeFileResult
     {

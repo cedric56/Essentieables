@@ -34,13 +34,19 @@ registers the same instances in `IServiceCollection`, so `Geolocation.Default` a
 ## How it works
 
 The package contains a small compiled library (registration, MAUI facade accessors, shared helpers
-such as the Nominatim geocoder) plus **source files compiled into your app** by
-`buildTransitive/Essentieables.targets`:
+such as the Nominatim geocoder) plus **source files compiled into the project that references it**.
+`build/Essentieables.targets` detects the host, so there is nothing to declare:
 
-| Host | Sources compiled into the app | Enabled by |
-|------|-------------------------------|------------|
-| Avalonia | `Avalonia/*.avalonia.cs` and the Avalonia.Controls.Maui.Essentials sources | `<UseEssentieables>true</UseEssentieables>` |
-| Blazor WebAssembly, Blazor Server | `Blazor/*.cs`; `BlazorEssentials.js` is copied to `wwwroot/` | automatic with `Microsoft.NET.Sdk.Web` or `Microsoft.NET.Sdk.BlazorWebAssembly` |
+| Host | Detected when the project… | Sources compiled into it |
+|------|----------------------------|--------------------------|
+| Avalonia | references Avalonia (directly, transitively or through a project reference) | `Avalonia/*.avalonia.cs` and the Avalonia.Controls.Maui.Essentials sources |
+| Blazor WebAssembly, Blazor Server | uses `Microsoft.NET.Sdk.Web` or `Microsoft.NET.Sdk.BlazorWebAssembly` | `Blazor/*.cs`; `BlazorEssentials.js` is copied to `wwwroot/` |
+
+The sources are added at build time: they are compiled and visible to IntelliSense, but do not
+appear in Solution Explorer. The detection also applies when the package comes through a project
+reference (App → ViewModels → Essentieables): the ViewModels library, which references neither
+Avalonia nor ASP.NET Core, gets nothing, and the app gets the sources.
+To override the detection, set `<EssentieablesHost>` to `Avalonia`, `Blazor` or `None`.
 
 Platform code is selected by your project's own `#if` symbols (`WINDOWS`, `MACOS`) and by runtime
 `OperatingSystem` checks, so one package serves every target framework.
@@ -75,15 +81,18 @@ Existing implementations are reused rather than rewritten:
 
 ## Avalonia
 
-1. In the **app** project (the one that registers the services), enable the Avalonia sources:
+1. Reference the package from the app, directly or through a project it references (typically the
+   ViewModels library). Because the app references Avalonia, the Avalonia sources are compiled into it.
 
-   ```xml
-   <PropertyGroup>
-     <UseEssentieables>true</UseEssentieables>
-   </PropertyGroup>
-   ```
+   ViewModel libraries that do not reference Avalonia only get the compiled library: they use the MAUI
+   contracts. Every project that references Avalonia receives the sources. They are `internal`, so a
+   multi-platform app (shared `App` project + Desktop/Android/iOS heads) still compiles when both get
+   them, with CS0436 warnings for the Avalonia.Controls.Maui.Essentials types. To compile them once,
+   set `<EssentieablesHost>None</EssentieablesHost>` in the projects that do not call `UseEssentieables()`.
 
-   ViewModel libraries only need the package reference: they compile against the MAUI contracts.
+   The extra packages the Avalonia sources need (Avalonia.Controls.WebView, the WinRT contracts,
+   maui-labs Linux/macOS) are added automatically to projects that reference an `Avalonia*` package
+   directly: you do not need to list them.
 
 2. Register the services on the UI thread, once Avalonia is set up (the UI dispatcher is captured):
 
@@ -109,8 +118,9 @@ Services you registered before calling `UseEssentieables` are kept. An
 
 ## Blazor
 
-The Blazor sources are included automatically for projects using the Web or Blazor WebAssembly SDK,
-and `BlazorEssentials.js` is copied to the project's `wwwroot/` folder on build (the folder must exist).
+The Blazor sources are compiled into projects using the Web or Blazor WebAssembly SDK, and
+`BlazorEssentials.js` is copied to the project's `wwwroot/` folder on build (the folder must exist).
+A Razor class library is not detected: set `<EssentieablesHost>Blazor</EssentieablesHost>` there.
 
 ```csharp
 using Essentieables;
@@ -225,11 +235,11 @@ dotnet test tests/Essentieables.Tests -p:EssentieablesTargetFrameworks=net10.0
 
 # Package for a subset of target frameworks
 dotnet pack -c Release -o artifacts/packages -p:Version=1.0.0-local \
-    -p:EssentieablesTargetFrameworks="net10.0;net10.0-android"
+    -p:EssentieablesTargetFrameworks=net10.0,net10.0-android
 
 # Consumer checks against that package (see tests/Consumers)
 dotnet run --project tests/Consumers/AvaloniaSmoke
-dotnet build tests/Consumers/LibraryConsumer -p:ConsumerTargetFrameworks="net10.0;net10.0-android"
+dotnet build tests/Consumers/LibraryConsumer -p:ConsumerTargetFrameworks=net10.0,net10.0-android
 ```
 
 Building every target framework needs the `android`, `ios` and `macos` workloads (`ios` and `macos` on a Mac).

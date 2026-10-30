@@ -15,7 +15,7 @@ namespace Essentieables;
 /// Share backed by the Web Share API (navigator.share). Requires a secure context
 /// and, in most browsers, a user gesture. File sharing uses Web Share Level 2.
 /// </summary>
-public class BlazorShare : IAvaeShare
+internal class BlazorShare : IAvaeShare
 {
     bool _isSupported;
     public bool IsSupported => _isSupported;

@@ -17,7 +17,7 @@ namespace Essentieables;
 /// On iOS Safari the first Start triggers the motion-permission prompt and must be
 /// called from a user gesture.
 /// </summary>
-public abstract class BlazorSensorBase(string kind)
+internal abstract class BlazorSensorBase(string kind)
 {
     private readonly string _kind = kind;
 
@@ -147,7 +147,7 @@ public abstract class BlazorSensorBase(string kind)
 }
 
 /// <summary>Accelerometer from devicemotion accelerationIncludingGravity, reported in g.</summary>
-public class BlazorAccelerometer : BlazorSensorBase, IAccelerometer
+internal class BlazorAccelerometer : BlazorSensorBase, IAccelerometer
 {
     public BlazorAccelerometer() : base("accelerometer") { }
 
@@ -173,7 +173,7 @@ public class BlazorAccelerometer : BlazorSensorBase, IAccelerometer
 }
 
 /// <summary>Gyroscope from devicemotion rotationRate, converted to rad/s.</summary>
-public class BlazorGyroscope : BlazorSensorBase, IGyroscope
+internal class BlazorGyroscope : BlazorSensorBase, IGyroscope
 {
     public BlazorGyroscope() : base("gyroscope") { }
 
@@ -193,7 +193,7 @@ public class BlazorGyroscope : BlazorSensorBase, IGyroscope
 }
 
 /// <summary>Orientation quaternion derived from deviceorientation Euler angles.</summary>
-public class BlazorOrientationSensor : BlazorSensorBase, IOrientationSensor
+internal class BlazorOrientationSensor : BlazorSensorBase, IOrientationSensor
 {
     public BlazorOrientationSensor() : base("orientation") { }
 
@@ -214,7 +214,7 @@ public class BlazorOrientationSensor : BlazorSensorBase, IOrientationSensor
 }
 
 /// <summary>Compass heading from deviceorientationabsolute (or webkitCompassHeading on iOS).</summary>
-public class BlazorCompass : BlazorSensorBase, ICompass
+internal class BlazorCompass : BlazorSensorBase, ICompass
 {
     public BlazorCompass() : base("compass") { }
 
@@ -232,7 +232,7 @@ public class BlazorCompass : BlazorSensorBase, ICompass
 	}
 }
 
-public class BlazorMagnetometer : BlazorSensorBase, IMagnetometer
+internal class BlazorMagnetometer : BlazorSensorBase, IMagnetometer
 {
     public BlazorMagnetometer() : base("magnetometer") { }
 

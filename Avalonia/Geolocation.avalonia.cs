@@ -11,7 +11,7 @@ using PositionChangedEventArgs = Windows.Devices.Geolocation.PositionChangedEven
 namespace Essentieables
 {
     [SupportedOSPlatform("windows10.0.14393")]
-    public class AvaeGeolocation : IGeolocation
+    internal class AvaeGeolocation : IGeolocation
     {
         public event EventHandler<GeolocationLocationChangedEventArgs>? LocationChanged;
 

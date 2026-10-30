@@ -4,7 +4,7 @@ using System;
 
 namespace Essentieables
 {
-    public static class GeolocationExtensions
+    internal static class GeolocationExtensions
     {
         public static GeolocationRequest ToGeolocationRequest(this Microsoft.Maui.Devices.Sensors.GeolocationRequest request)
         {
@@ -25,7 +25,7 @@ namespace Essentieables
     /// <summary>
     /// Represents levels of accuracy when determining the device location.
     /// </summary>
-    public enum GeolocationAccuracy
+    internal enum GeolocationAccuracy
     {
         // Default is Medium
         /// <summary>Represents default accuracy (Medium), typically within 30-500 meters.</summary>
@@ -65,7 +65,7 @@ namespace Essentieables
     /// <summary>
     /// Represents the criteria for a location request.
     /// </summary>
-    public partial class GeolocationRequest
+    internal partial class GeolocationRequest
     {
         internal uint PlatformDesiredAccuracy
         {

@@ -19,7 +19,7 @@ namespace Essentieables;
 /// Provides extension methods for registering Essentieables services
 /// in an Avalonia application.
 /// </summary>
-public static class AvaloniaExtensions
+internal static class AvaloniaExtensions
 {
     /// <summary>
     /// Initializes Essentieables for an Avalonia application builder.

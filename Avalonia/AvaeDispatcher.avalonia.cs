@@ -8,7 +8,7 @@ using DispatcherPriority = Avalonia.Threading.DispatcherPriority;
 
 namespace Essentieables;
 
-public class AvaeDispatcher : IDispatcher
+internal class AvaeDispatcher : IDispatcher
 {
     private static IDispatcher? dispatcher;
     public static IDispatcher Default => dispatcher ?? Microsoft.Maui.Dispatching.Dispatcher.GetForCurrentThread() ?? throw new ArgumentNullException(nameof(dispatcher));
@@ -83,7 +83,7 @@ public class AvaeDispatcher : IDispatcher
 /// <summary>
 /// Avalonia implementation of MAUI's IDispatcherTimer
 /// </summary>
-public class AvaloniaDispatcherTimer : IDispatcherTimer
+internal class AvaloniaDispatcherTimer : IDispatcherTimer
 {
     private readonly DispatcherTimer _avaloniaTimer;
     private readonly Dispatcher _dispatcher;

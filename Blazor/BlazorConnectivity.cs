@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace Essentieables;
-public sealed class BlazorConnectivity : IConnectivity, IAsyncDisposable
+internal sealed class BlazorConnectivity : IConnectivity, IAsyncDisposable
 {
     public sealed record BrowserState(bool Online, string Type, bool SaveData);
 

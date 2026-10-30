@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace Essentieables;
 
-public partial class AvaeShareFile : ShareFile
+internal partial class AvaeShareFile : ShareFile
 {
     private IStorageFile? _storageFile;
 

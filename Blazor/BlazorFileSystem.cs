@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace Essentieables;
 
-public class BlazorFileSystem : IFileSystem
+internal class BlazorFileSystem : IFileSystem
 {
     public string CacheDirectory => EnsureDirectory("/cache");
 

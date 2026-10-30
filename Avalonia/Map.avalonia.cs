@@ -122,7 +122,7 @@ class OriginalMapImplementation : IMap
 /// <summary>
 /// This class contains static extension methods for use with <see cref="Placemark"/> objects.
 /// </summary>
-public static partial class OriginalPlacemarkExtensions
+internal static partial class OriginalPlacemarkExtensions
 {
     /// <inheritdoc cref="Map.OpenAsync(Placemark, MapLaunchOptions)"/>
     public static Task OpenMapsAsync(this Placemark placemark, MapLaunchOptions options) =>

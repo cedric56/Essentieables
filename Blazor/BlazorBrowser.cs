@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 namespace Essentieables;
 
 /// <summary>Opens URIs in a new browser tab via window.open.</summary>
-public class BlazorBrowser : IBrowser
+internal class BlazorBrowser : IBrowser
 {
     public async Task<bool> OpenAsync(Uri uri, BrowserLaunchOptions options)
     {

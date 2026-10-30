@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 namespace Essentieables;
 
 /// <summary>The camera torch is not reachable from the browser.</summary>
-public class BlazorFlashlight : IFlashlight
+internal class BlazorFlashlight : IFlashlight
 {
     public async Task<bool> IsSupportedAsync()
     {

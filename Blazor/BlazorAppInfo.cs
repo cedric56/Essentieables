@@ -12,7 +12,7 @@ namespace Essentieables;
 /// current by browser theme-change events, so the synchronous <see cref="IAppInfo"/> surface
 /// never touches JS interop directly.
 /// </summary>
-public sealed class BlazorAppInfo : IAppInfo, IAsyncDisposable
+internal sealed class BlazorAppInfo : IAppInfo, IAsyncDisposable
 {
     private static readonly Version AssemblyVersion =
         Assembly.GetEntryAssembly()?.GetName().Version ?? new Version(1, 0);

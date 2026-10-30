@@ -6,7 +6,7 @@ using Application = Avalonia.Application;
 
 namespace Essentieables;
 
-public class AvaeTopLevelStateManager : IAvaloniaEssentialsPlatformProvider
+internal class AvaeTopLevelStateManager : IAvaloniaEssentialsPlatformProvider
 {
     TopLevel? _active;
 

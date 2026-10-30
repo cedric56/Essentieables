@@ -19,7 +19,7 @@ using Dispatcher = Avalonia.Threading.Dispatcher;
 namespace Essentieables
 {
 	[SupportedOSPlatform("windows10.0.10240")]
-	public static partial class AvaePermissions
+	internal static partial class AvaePermissions
 	{
         private static readonly Lazy<HashSet<string>> DeclaredCapabilities =
     new(LoadDeclaredCapabilities);

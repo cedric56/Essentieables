@@ -8,7 +8,7 @@ using Microsoft.Maui.Storage;
 namespace Essentieables;
 
 /// <summary>Version tracking persisted in preferences (localStorage).</summary>
-public class BlazorVersionTracking : IVersionTracking
+internal class BlazorVersionTracking : IVersionTracking
 {
 	const string SharedName = "versiontracking";
 	const string VersionsKey = "VersionTracking.Versions";

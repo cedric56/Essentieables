@@ -18,7 +18,7 @@ namespace Essentieables;
 /// in the background. A per-key semaphore serializes those background persists, so a rapid
 /// Set-then-Remove (or vice versa) on the same key can't land in localStorage out of order.
 /// </summary>
-public sealed class BlazorPreferences : IPreferences
+internal sealed class BlazorPreferences : IPreferences
 {
     private readonly object _pendingLock = new();
     private readonly Dictionary<long, Task> _pending = new();

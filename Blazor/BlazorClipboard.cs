@@ -11,7 +11,7 @@ namespace Essentieables;
 /// synchronous "has text" query — <see cref="HasText"/> reflects the last value
 /// observed through this API rather than the live OS clipboard.
 /// </summary>
-public class BlazorClipboard : IClipboard
+internal class BlazorClipboard : IClipboard
 {
     bool lastKnownHasText;
 

@@ -15,7 +15,7 @@ namespace Essentieables;
 /// readable with regular System.IO APIs.
 /// PickOptions.FileTypes is platform-keyed and has no browser entry, so it is ignored.
 /// </summary>
-public sealed class BlazorFilePicker : IFilePicker
+internal sealed class BlazorFilePicker : IFilePicker
 {
     public async Task<FileResult?> PickAsync(PickOptions? options = null)
         => (await PickCoreAsync(options, multiple: false)).FirstOrDefault();

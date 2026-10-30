@@ -11,7 +11,7 @@ using System.Threading.Tasks;
 namespace Essentieables;
 
 /// <summary>Contacts are not accessible from the browser (the Contact Picker API is not broadly available).</summary>
-public class BlazorContacts : IContacts
+internal class BlazorContacts : IContacts
 {
     public async Task<IEnumerable<Contact>> GetAllAsync(CancellationToken cancellationToken = default)
     {

@@ -8,7 +8,7 @@ namespace Essentieables;
 
 
 /// <summary>SMS compose via an sms: link (effective on mobile browsers).</summary>
-public class BlazorSms : ISms
+internal class BlazorSms : ISms
 {
     public bool IsComposeSupported => true;
 

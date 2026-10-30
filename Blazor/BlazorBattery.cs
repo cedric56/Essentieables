@@ -9,7 +9,7 @@ namespace Essentieables;
 /// Battery info backed by navigator.getBattery() (Battery Status API — Chromium only).
 /// Where the API is unavailable the state reads as Unknown with a full charge level.
 /// </summary>
-public sealed class BlazorBattery : IBattery, IAsyncDisposable
+internal sealed class BlazorBattery : IBattery, IAsyncDisposable
 {
     public sealed record Snapshot(double Level, bool Charging);
 

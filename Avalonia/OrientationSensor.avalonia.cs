@@ -11,7 +11,7 @@ namespace Essentieables;
 /// <summary>
 /// Concrete implementation of the <see cref="Microsoft.Maui.Devices.Sensors.IOrientationSensor"/> APIs.
 /// </summary>
-public partial class OriginalOrientationSensorImplementation : IOrientationSensor
+internal partial class OriginalOrientationSensorImplementation : IOrientationSensor
 {
     bool UseSyncContext => SensorSpeed == SensorSpeed.Default || SensorSpeed == SensorSpeed.UI;
 

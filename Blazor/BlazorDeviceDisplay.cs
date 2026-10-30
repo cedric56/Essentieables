@@ -13,7 +13,7 @@ namespace Essentieables;
 /// automatically when the page becomes visible again, since browsers release wake locks
 /// whenever the tab is hidden.
 /// </summary>
-public sealed class BlazorDeviceDisplay : IDeviceDisplay, IAsyncDisposable
+internal sealed class BlazorDeviceDisplay : IDeviceDisplay, IAsyncDisposable
 {
     public sealed record Snapshot(double Width, double Height, double PixelRatio, string OrientationType, bool WakeLockActive);
     public sealed record ChangeSnapshot(double Width, double Height, double PixelRatio, string OrientationType);

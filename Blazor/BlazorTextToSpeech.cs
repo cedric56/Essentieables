@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 namespace Essentieables;
 
 /// <summary>Text to speech backed by the Web Speech API (speechSynthesis).</summary>
-public class BlazorTextToSpeech : ITextToSpeech
+internal class BlazorTextToSpeech : ITextToSpeech
 {
     //internal static async Task<string> SpeechGetVoicesAsync(IJSRuntime js) =>
     //    await ModuleRef(js).InvokeAsync<string>("speechGetVoices");

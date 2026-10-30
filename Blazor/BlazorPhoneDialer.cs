@@ -6,7 +6,7 @@ namespace Essentieables;
 
 
 /// <summary>Phone dialing via a tel: link (effective on mobile browsers or with a desktop handler).</summary>
-public class BlazorPhoneDialer: IPhoneDialer
+internal class BlazorPhoneDialer: IPhoneDialer
 {
     public bool IsSupported => true;
 

@@ -5,7 +5,7 @@ using System;
 namespace Essentieables;
 
 /// <summary>No barometric pressure sensor is exposed to web content.</summary>
-public class BlazorBarometer : IBarometer
+internal class BlazorBarometer : IBarometer
 {
     public bool IsSupported => false;
 

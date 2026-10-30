@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 namespace Essentieables;
 
 /// <summary>Vibration backed by navigator.vibrate (mobile browsers; no-ops when unsupported by hardware).</summary>
-public class BlazorVibration : IVibration
+internal class BlazorVibration : IVibration
 {
     private bool isSupported;
 

@@ -13,7 +13,7 @@ using System.Threading.Tasks;
 
 namespace Essentieables;
 
-public static class BlazorEssentials
+internal static class BlazorEssentials
 {
     public static void UseBlazorEssentieables(this IServiceCollection services)
     {

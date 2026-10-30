@@ -10,7 +10,7 @@ namespace Essentieables;
 /// Fetched once via <see cref="InitializeAsync"/> and cached, so the synchronous
 /// <see cref="IDeviceInfo"/> surface never calls JS interop directly.
 /// </summary>
-public sealed class BlazorDeviceInfo : IDeviceInfo
+internal sealed class BlazorDeviceInfo : IDeviceInfo
 {
     /// <summary>The DevicePlatform reported by this backend.</summary>
     public static DevicePlatform BrowserPlatform { get; } = DevicePlatform.Create("Browser");

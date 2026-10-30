@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 namespace Essentieables;
 
 /// <summary>App shortcuts have no web equivalent.</summary>
-public class BlazorAppActions : IAppActions
+internal class BlazorAppActions : IAppActions
 {
     public bool IsSupported => false;
 

@@ -9,7 +9,7 @@ namespace Essentieables;
 /// Launcher backed by window.open for web URLs and location.assign for
 /// protocol-handler schemes (mailto:, tel:, sms:). Files open as blob URLs in a new tab.
 /// </summary>
-public class BlazorLauncher : ILauncher
+internal class BlazorLauncher : ILauncher
 {
     internal static async Task<bool> OpenUrlAsync(string url)
     {

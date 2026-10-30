@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 namespace Essentieables;
 
 /// <summary>Haptic feedback approximated with short navigator.vibrate pulses.</summary>
-public class BlazorHapticFeedback : IHapticFeedback
+internal class BlazorHapticFeedback : IHapticFeedback
 {
     private bool isSupported;
 

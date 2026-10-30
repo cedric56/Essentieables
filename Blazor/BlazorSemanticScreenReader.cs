@@ -5,7 +5,7 @@ using System;
 namespace Essentieables;
 
 /// <summary>Screen reader announcements via a visually-hidden aria-live region.</summary>
-public class BlazorSemanticScreenReader : ISemanticScreenReader
+internal class BlazorSemanticScreenReader : ISemanticScreenReader
 {
     public async void Announce(string text)
     {

@@ -4,7 +4,7 @@ using System;
 
 namespace Essentieables
 {
-    public static class GeolocationListeningExtensions
+    internal static class GeolocationListeningExtensions
     {
         public static GeolocationListeningRequest ToGeolocationListeningRequest(this Microsoft.Maui.Devices.Sensors.GeolocationListeningRequest request)
         {
@@ -23,7 +23,7 @@ namespace Essentieables
         }
     }
 
-    public partial class GeolocationListeningRequest
+    internal partial class GeolocationListeningRequest
 	{/// <summary>
      /// Creates a new request object with default values
      /// </summary>

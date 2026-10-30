@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 namespace Essentieables;
 
 /// <summary>Email compose via a mailto: link handled by the user's configured mail client.</summary>
-public class BlazorEmail : IEmail
+internal class BlazorEmail : IEmail
 {
     public bool IsComposeSupported => true;
 
