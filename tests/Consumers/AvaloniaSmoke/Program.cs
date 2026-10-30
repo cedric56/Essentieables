@@ -56,6 +56,6 @@ foreach (var failure in failures)
 
 return failures.Count == 0 ? 0 : 1;
 
-class SmokeApp : Application
+class SmokeApp : Avalonia.Controls.Application
 {
 }
