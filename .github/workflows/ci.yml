@@ -30,22 +30,22 @@ jobs:
           - name: Linux · Android · Browser · Blazor
             os: ubuntu-latest
             workloads: android
-            lib-tfms: net10.0,net10.0-browser,net10.0-android
-            consumer-tfms: net10.0,net10.0-android
+            lib-tfms: net10.0;net10.0-browser;net10.0-android
+            consumer-tfms: net10.0;net10.0-android
             blazor: true
           # Windows desktop (WinRT ports) + windows TFM (MAUI Essentials WinUI build)
           - name: Windows
             os: windows-latest
             workloads: ''
-            lib-tfms: net10.0,net10.0-windows10.0.19041
-            consumer-tfms: net10.0,net10.0-windows10.0.19041.0
+            lib-tfms: net10.0;net10.0-windows10.0.19041
+            consumer-tfms: net10.0;net10.0-windows10.0.19041.0
             blazor: false
           # macOS desktop (net10.0 fallback + net10.0-macos maui-labs services) + iOS
           - name: macOS · iOS
             os: macos-latest
             workloads: macos ios
-            lib-tfms: net10.0,net10.0-ios,net10.0-macos
-            consumer-tfms: net10.0-ios,net10.0-macos
+            lib-tfms: net10.0;net10.0-ios;net10.0-macos
+            consumer-tfms: net10.0-ios;net10.0-macos
             blazor: false
 
     defaults:
@@ -79,14 +79,18 @@ jobs:
           dotnet pack Essentieables.csproj
           -c Release
           -o artifacts/packages
-          -p:EssentieablesTargetFrameworks=${{ matrix.lib-tfms }}
           -p:Version=${{ env.EssentieablesVersion }}
+        env:
+          # Lists go through the environment: on the command line both ';' and ','
+          # separate properties (MSB1006). MSBuild reads environment variables as properties.
+          EssentieablesTargetFrameworks: ${{ matrix.lib-tfms }}
 
       - name: Consumer compiles the injected sources
         run: >
           dotnet build tests/Consumers/LibraryConsumer
           -c Release
-          -p:ConsumerTargetFrameworks=${{ matrix.consumer-tfms }}
+        env:
+          ConsumerTargetFrameworks: ${{ matrix.consumer-tfms }}
 
       - name: Avalonia headless smoke test
         run: dotnet run --project tests/Consumers/AvaloniaSmoke -c Release

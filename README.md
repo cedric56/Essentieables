@@ -233,13 +233,14 @@ await Share.Default.RequestAsync("Title", files);                  // share File
 # Unit tests (net10.0 only, no workload required)
 dotnet test tests/Essentieables.Tests -p:EssentieablesTargetFrameworks=net10.0
 
-# Package for a subset of target frameworks
-dotnet pack -c Release -o artifacts/packages -p:Version=1.0.0-local \
-    -p:EssentieablesTargetFrameworks=net10.0,net10.0-android
+# Package for a subset of target frameworks.
+# Lists go in environment variables: `-p:` splits its value on ';' and ',' (MSB1006).
+export EssentieablesTargetFrameworks="net10.0;net10.0-android"   # PowerShell: $env:EssentieablesTargetFrameworks = "..."
+dotnet pack -c Release -o artifacts/packages -p:Version=1.0.0-local
 
 # Consumer checks against that package (see tests/Consumers)
 dotnet run --project tests/Consumers/AvaloniaSmoke
-dotnet build tests/Consumers/LibraryConsumer -p:ConsumerTargetFrameworks=net10.0,net10.0-android
+ConsumerTargetFrameworks="net10.0;net10.0-android" dotnet build tests/Consumers/LibraryConsumer
 ```
 
 Building every target framework needs the `android`, `ios` and `macos` workloads (`ios` and `macos` on a Mac).

@@ -9,9 +9,10 @@
       net10.0-macos;
       net10.0-windows10.0.19041
     </TargetFrameworks>
-    <!-- CI builds one platform per runner: -p:EssentieablesTargetFrameworks=net10.0,net10.0-android
-         (commas: on the command line a ';' separates properties, MSB1006) -->
-    <TargetFrameworks Condition="'$(EssentieablesTargetFrameworks)' != ''">$(EssentieablesTargetFrameworks.Replace(',', ';'))</TargetFrameworks>
+    <!-- Builds a subset, e.g. CI builds one platform per runner. Set it as an environment variable
+         (EssentieablesTargetFrameworks="net10.0;net10.0-android"): on the command line, -p: splits
+         values on ';' and ',' (MSB1006). A single TFM can be passed with -p:. -->
+    <TargetFrameworks Condition="'$(EssentieablesTargetFrameworks)' != ''">$(EssentieablesTargetFrameworks)</TargetFrameworks>
     <Nullable>enable</Nullable>
     <IsLinuxOS Condition="$([MSBuild]::IsOSPlatform('linux'))">true</IsLinuxOS>
     <IsWindowsOS>$([MSBuild]::IsOSPlatform('windows'))</IsWindowsOS>
