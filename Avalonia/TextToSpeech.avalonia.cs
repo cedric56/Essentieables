@@ -13,9 +13,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Windows.Media.Core;
-using Windows.Media.Playback;
 using Windows.Media.SpeechSynthesis;
-using MediaPlayer = Windows.Media.Playback.MediaPlayer;
 
 namespace Essentieables;
 
@@ -84,7 +82,7 @@ partial class OriginalTextToSpeechImplementation : ITextToSpeech
 
         try
         {
-            var player = new MediaPlayer();
+            var player = new global::Windows.Media.Playback.MediaPlayer();
 
             var ssml = GetSpeakParametersSSMLProsody(text, options);
 
@@ -117,7 +115,7 @@ partial class OriginalTextToSpeechImplementation : ITextToSpeech
             player.MediaEnded -= PlayerMediaEnded;
             player.Dispose();
 
-            void PlayerMediaEnded(MediaPlayer sender, object args)
+            void PlayerMediaEnded(global::Windows.Media.Playback.MediaPlayer sender, object args)
             {
                 tcsUtterance.TrySetResult(true);
             }
