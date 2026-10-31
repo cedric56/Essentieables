@@ -6,6 +6,7 @@ using Essentieables;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Storage;
+using Application = Avalonia.Application;
 
 AppBuilder.Configure<SmokeApp>()
     .UseHeadless(new AvaloniaHeadlessPlatformOptions())
