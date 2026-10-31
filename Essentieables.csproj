@@ -54,9 +54,9 @@
   <ItemGroup>
     <Compile Remove="Blazor\**;Avalonia\**;Avalonia.Controls.Maui.Essentials\**" />
     <None Remove="Blazor\**;Avalonia\**;Avalonia.Controls.Maui.Essentials\**" />
-    <None Include="Blazor\**\*.cs;Blazor\**\*.js" Pack="true" PackagePath="src\Blazor\%(RecursiveDir)" />
-    <None Include="Avalonia\**\*.cs" Pack="true" PackagePath="src\Avalonia\%(RecursiveDir)" />
-    <None Include="Avalonia.Controls.Maui.Essentials\**\*.cs" Pack="true" PackagePath="src\Avalonia.Controls.Maui.Essentials\%(RecursiveDir)" />
+    <None Include="Blazor\**\*.cs;Blazor\**\*.js" Pack="true" PackagePath="src\Blazor\" />
+    <None Include="Avalonia\**\*.cs" Pack="true" PackagePath="src\Avalonia\" />
+    <None Include="Avalonia.Controls.Maui.Essentials\**\*.cs" Pack="true" PackagePath="src\Avalonia.Controls.Maui.Essentials\" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(IsWindowsTFM)' == 'true'">

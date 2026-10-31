@@ -97,7 +97,9 @@ Existing implementations are reused rather than rewritten:
    ```xml
    <ItemGroup>
      <PackageReference Include="Avalonia.Controls.WebView" Version="12.1.1" />
-     <PackageReference Include="WindowsContracts.Net.Foundation.UniversalApiContract" Version="5.19041.10" PrivateAssets="compile" />
+     <!-- not on net10.0-windows*, which already has the WinRT projection -->
+     <PackageReference Include="WindowsContracts.Net.Foundation.UniversalApiContract" Version="5.19041.10" PrivateAssets="compile"
+                       Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) != 'windows'" />
      <PackageReference Include="Microsoft.Maui.Platforms.Linux.Gtk4.Essentials" Version="0.1.0-preview.12.26421.1" />
      <!-- net10.0-macos only -->
      <PackageReference Include="Microsoft.Maui.Platforms.MacOS.Essentials" Version="0.1.0-preview.12.26368.2"

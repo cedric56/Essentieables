@@ -15,6 +15,7 @@ using System.Threading.Tasks;
 using Windows.Media.Core;
 using Windows.Media.Playback;
 using Windows.Media.SpeechSynthesis;
+using MediaPlayer = Windows.Media.Playback.MediaPlayer;
 
 namespace Essentieables;
 

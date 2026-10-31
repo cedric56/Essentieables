@@ -1,10 +1,6 @@
 <Solution>
   <Project Path="Essentieables.csproj" />
   <Folder Name="/tests/">
-    <Project Path="tests/Consumers/AvaloniaSmoke/AvaloniaSmoke.csproj" />
-    <Project Path="tests/Consumers/BlazorServerConsumer/BlazorServerConsumer.csproj" />
-    <Project Path="tests/Consumers/BlazorWasmConsumer/BlazorWasmConsumer.csproj" />
-    <Project Path="tests/Consumers/LibraryConsumer/LibraryConsumer.csproj" />
     <Project Path="tests/Essentieables.Tests/Essentieables.Tests.csproj" />
   </Folder>
 </Solution>

@@ -40,7 +40,9 @@
 
     <ItemGroup Condition="'$(_EssentieablesAvalonia)' == 'true'">
       <_EssentieablesRequiredPackage Include="Avalonia.Controls.WebView" />
-      <_EssentieablesRequiredPackage Include="WindowsContracts.Net.Foundation.UniversalApiContract" />
+      <!-- net10.0-windows* gets WinRT from Microsoft.Windows.SDK.NET; the contract would duplicate it (CS0433). -->
+      <_EssentieablesRequiredPackage Include="WindowsContracts.Net.Foundation.UniversalApiContract"
+                                     Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) != 'windows'" />
       <_EssentieablesRequiredPackage Include="Microsoft.Maui.Platforms.Linux.Gtk4.Essentials" />
       <_EssentieablesRequiredPackage Include="Microsoft.Maui.Platforms.MacOS.Essentials"
                                      Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'macos'" />
