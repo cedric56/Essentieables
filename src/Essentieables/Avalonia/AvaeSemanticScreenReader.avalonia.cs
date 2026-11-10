@@ -1,4 +1,7 @@
-﻿
+﻿// Windows only: compiled where ESSENTIEABLES_WINDOWS is defined (net10.0 and net10.0-windows*, see build/Essentieables.targets),
+// so that Android, iOS, macOS and browser apps need no Windows contract package.
+#if ESSENTIEABLES_WINDOWS
+
 
 using Microsoft.Maui.Accessibility;
 using System;
@@ -121,3 +124,4 @@ partial class AvaeSemanticScreenReader(AvaeTopLevelStateManager topLevelStateMan
             string.Empty);
     }
 }
+#endif

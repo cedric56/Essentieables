@@ -70,6 +70,10 @@ internal static class AvaloniaExtensions
         var fileSystem = new Avalonia.Controls.Maui.Essentials.AvaloniaFileSystem();
         var webAuthenticator = new Avalonia.Controls.Maui.Essentials.AvaloniaWebAuthenticator(platformProvider);
 
+        // Each branch is compiled only for the target frameworks that can run it (ESSENTIEABLES_WINDOWS, ESSENTIEABLES_LINUX and
+        // MACOS, set by build/Essentieables.targets and the SDK): an Android, iOS or browser app references neither the Windows
+        // contracts nor the GTK4 Essentials.
+#if ESSENTIEABLES_WINDOWS
         // Windows: use the Windows-specific .NET MAUI implementations where
         // supported by the current Windows version, with Avae replacements
         // for selected services.
@@ -117,9 +121,12 @@ internal static class AvaloniaExtensions
                 webAuthenticator,
                 () => Microsoft.Maui.ApplicationModel.VersionTracking.Default);
         }
+        else
+#endif
+#if ESSENTIEABLES_LINUX
         // Linux: register the Linux GTK4 implementations provided by .NET MAUI,
         // while using the shared Avalonia-specific services where applicable.
-        else if (OperatingSystem.IsLinux())
+        if (OperatingSystem.IsLinux())
         {
             services.SetDefaults(
                 new Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Sensors.LinuxAccelerometer(),
@@ -159,10 +166,12 @@ internal static class AvaloniaExtensions
                 webAuthenticator,
                 () => VersionTracking.Default);
         }
+        else
+#endif
         // macOS: register the implementations supplied by the macOS-specific
         // integration. This branch is compiled only when MACOS is defined.
 #if MACOS
-        else if (OperatingSystem.IsMacOS())
+        if (OperatingSystem.IsMacOS())
         {
             // Avalonia/MAUI interop may otherwise trigger cross-thread warnings
             // in APIs used by this integration.
@@ -206,10 +215,11 @@ internal static class AvaloniaExtensions
                 webAuthenticator,
                 () => Microsoft.Maui.ApplicationModel.VersionTracking.Default);
         }
+        else
 #endif
         // Browser: register only the services supported by this environment.
         // Unsupported APIs are passed as null so SetDefaults can handle them.
-        else if (OperatingSystem.IsBrowser())
+        if (OperatingSystem.IsBrowser())
         {
             services.SetDefaults(
                 null!,

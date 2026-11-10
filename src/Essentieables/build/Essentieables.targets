@@ -28,8 +28,14 @@
   <!--
     The Avalonia sources need a few packages (see _EssentieablesRequiredPackage below). They cannot be added
     from here: NuGet restores with ExcludeRestorePackageImports=true, so package .targets are never imported
-    during restore and any PackageReference they add is ignored. The app references them itself, and
-    ESS0001 lists the ones that are missing.
+    during restore and any PackageReference they add is ignored. The Essentieables.Avalonia package brings
+    them instead, as dependencies chosen by NuGet for each target framework; ESS0001 lists the missing ones.
+
+    Only the code a target framework can run is compiled, so that it needs no package of another platform:
+      ESSENTIEABLES_WINDOWS : the Windows ports (WinRT, Win32), on net10.0 and net10.0-windows*
+      ESSENTIEABLES_LINUX   : the GTK4 Essentials of maui-labs, on net10.0
+      MACOS (SDK)           : the macOS Essentials of maui-labs, on net10.0-macos
+    Android, iOS and browser apps compile none of them.
   -->
   <Target Name="_EssentieablesAddSources" AfterTargets="ResolveAssemblyReferences">
     <PropertyGroup>
@@ -38,6 +44,13 @@
       <_EssentieablesFlavorExcluded Condition="'$(_EssentieablesIsBrowser)' == 'true'">Default</_EssentieablesFlavorExcluded>
       <_EssentieablesFlavorExcluded Condition="'$(_EssentieablesIsBrowser)' != 'true'">Browser</_EssentieablesFlavorExcluded>
       <_EssentieablesTargetPlatform>$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)'))</_EssentieablesTargetPlatform>
+      <_EssentieablesWindows Condition="'$(_EssentieablesTargetPlatform)' == '' or '$(_EssentieablesTargetPlatform)' == 'windows'">true</_EssentieablesWindows>
+      <_EssentieablesLinux Condition="'$(_EssentieablesTargetPlatform)' == '' or '$(_EssentieablesTargetPlatform)' == 'linux'">true</_EssentieablesLinux>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(_EssentieablesAvalonia)' == 'true'">
+      <DefineConstants Condition="'$(_EssentieablesWindows)' == 'true'">$(DefineConstants);ESSENTIEABLES_WINDOWS</DefineConstants>
+      <DefineConstants Condition="'$(_EssentieablesLinux)' == 'true'">$(DefineConstants);ESSENTIEABLES_LINUX</DefineConstants>
     </PropertyGroup>
 
     <ItemGroup Condition="'$(_EssentieablesAvalonia)' == 'true'">
@@ -45,17 +58,15 @@
       <!-- Required on all Avalonia targets -->
       <_EssentieablesRequiredPackage Include="Avalonia.Controls.WebView" />
 
-      <!-- Windows contract: except Windows and Browser -->
+      <!-- Windows contract: where the Windows ports are compiled, except net10.0-windows* (WinRT projection of the SDK) -->
       <_EssentieablesRequiredPackage
           Include="WindowsContracts.Net.Foundation.UniversalApiContract"
-          Condition="'$(_EssentieablesTargetPlatform)' != 'windows'
-             AND '$(_EssentieablesTargetPlatform)' != 'browser'" />
+          Condition="'$(_EssentieablesWindows)' == 'true' AND '$(_EssentieablesTargetPlatform)' != 'windows'" />
 
-      <!-- GTK4 Essentials: default desktop target only -->
+      <!-- GTK4 Essentials: where the Linux branch is compiled -->
       <_EssentieablesRequiredPackage
           Include="Microsoft.Maui.Platforms.Linux.Gtk4.Essentials"
-          Condition="'$(_EssentieablesTargetPlatform)' == ''
-             OR '$(_EssentieablesTargetPlatform)' == 'linux'" />
+          Condition="'$(_EssentieablesLinux)' == 'true'" />
 
       <!-- macOS Essentials -->
       <_EssentieablesRequiredPackage
@@ -72,7 +83,7 @@
 
     <Error Condition="'@(_EssentieablesMissingPackage)' != ''"
            Code="ESS0001"
-           Text="Essentieables: the Avalonia sources need these packages, add them to $(MSBuildProjectFile): @(_EssentieablesMissingPackage, ', '). To keep the Avalonia sources out of this project, set &lt;EssentieablesHost&gt;None&lt;/EssentieablesHost&gt;." />
+           Text="Essentieables: the Avalonia sources need these packages for $(TargetFramework): @(_EssentieablesMissingPackage, ', '). Reference Essentieables.Avalonia in $(MSBuildProjectFile), which brings them for each target framework, or add them yourself. To keep the Avalonia sources out of this project, set &lt;EssentieablesHost&gt;None&lt;/EssentieablesHost&gt;." />
 
     <ItemGroup Condition="'$(_EssentieablesAvalonia)' == 'true'">
       <Compile Include="$(_EssentieablesSources)Avalonia\**\*.cs" />

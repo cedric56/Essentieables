@@ -97,6 +97,14 @@ jobs:
           # separate properties (MSB1006). MSBuild reads environment variables as properties.
           EssentieablesTargetFrameworks: ${{ matrix.lib-tfms }}
 
+      - name: Pack Essentieables.Avalonia
+        # No code: the packages of the Avalonia sources for each target framework (nuspec), which the Avalonia consumers reference.
+        run: >
+          dotnet pack src/Essentieables.Avalonia/Essentieables.Avalonia.csproj
+          -c Release
+          -o artifacts/packages
+          -p:Version=${{ env.EssentieablesVersion }}
+
       - name: Consumer compiles the injected sources
         run: >
           dotnet build tests/Consumers/LibraryConsumer

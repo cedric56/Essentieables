@@ -9,7 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Essentieables" Version="$(EssentieablesVersion)" />
+    <!-- Essentieables comes through Essentieables.Avalonia (Directory.Build.props), as in an Avalonia app. -->
     <PackageReference Include="Avalonia" Version="$(AvaloniaVersion)" />
     <PackageReference Include="Avalonia.Headless" Version="$(AvaloniaVersion)" />
   </ItemGroup>

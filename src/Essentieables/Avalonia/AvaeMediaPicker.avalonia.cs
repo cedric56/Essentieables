@@ -1,4 +1,7 @@
-﻿
+﻿// Windows only: compiled where ESSENTIEABLES_WINDOWS is defined (net10.0 and net10.0-windows*, see build/Essentieables.targets),
+// so that Android, iOS, macOS and browser apps need no Windows contract package.
+#if ESSENTIEABLES_WINDOWS
+
 // Portions Copyright (c) .NET Foundation and Contributors (.NET MAUI, MIT License). See THIRD-PARTY-NOTICES.txt.
 
 using Essentieables;
@@ -176,3 +179,4 @@ internal class AvaeMediaPicker(AvaeTopLevelStateManager topLevelStateManager, Av
             };
     }
 }
+#endif

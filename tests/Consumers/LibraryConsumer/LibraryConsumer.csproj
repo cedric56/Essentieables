@@ -11,7 +11,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Essentieables" Version="$(EssentieablesVersion)" />
+    <!-- Essentieables comes through Essentieables.Avalonia (Directory.Build.props), as in an Avalonia app. -->
     <!-- Referencing Avalonia is what makes Essentieables inject its Avalonia sources. -->
     <PackageReference Include="Avalonia" Version="$(AvaloniaVersion)" />
   </ItemGroup>

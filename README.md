@@ -92,23 +92,32 @@ Existing implementations are reused rather than rewritten:
    them, with CS0436 warnings for the Avalonia.Controls.Maui.Essentials types. To compile them once,
    set `<EssentieablesHost>None</EssentieablesHost>` in the projects that do not call `UseEssentieables()`.
 
-   The project that receives the Avalonia sources must also reference the packages they use (a
-   package cannot add them for you: NuGet ignores package targets while restoring). The build stops
-   with **ESS0001** and lists the missing ones:
+   The project that receives the Avalonia sources also needs the packages they use. Reference
+   **Essentieables.Avalonia** there instead of Essentieables: it has no code, and brings Essentieables and
+   those packages as dependencies that NuGet chooses for each target framework of the app:
 
    ```xml
    <ItemGroup>
-     <PackageReference Include="Avalonia.Controls.WebView" Version="12.1.1" />
-     <!-- not on net10.0-windows*, which already has the WinRT projection -->
-     <PackageReference Include="WindowsContracts.Net.Foundation.UniversalApiContract" Version="5.19041.10" PrivateAssets="compile"
-                       Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) != 'windows'" />
-     <PackageReference Include="Microsoft.Maui.Platforms.Linux.Gtk4.Essentials" Version="0.1.0-preview.12.26421.1" />
-     <!-- net10.0-macos only -->
-     <PackageReference Include="Microsoft.Maui.Platforms.MacOS.Essentials" Version="0.1.0-preview.12.26368.2"
-                       ExcludeAssets="analyzers"
-                       Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'macos'" />
+     <PackageReference Include="Essentieables.Avalonia" Version="1.0.0-preview.1" />
    </ItemGroup>
    ```
+
+   | Target framework | Packages besides Essentieables and Avalonia.Controls.WebView |
+   |------------------|---------------------------------------------------------------|
+   | `net10.0` (desktop, any OS) | `WindowsContracts.Net.Foundation.UniversalApiContract`, `Microsoft.Maui.Platforms.Linux.Gtk4.Essentials` |
+   | `net10.0-windows10.0.19041` | — (the SDK projects WinRT) |
+   | `net10.0-macos` | `Microsoft.Maui.Platforms.MacOS.Essentials` |
+   | `net10.0-android`, `net10.0-ios`, `net10.0-browser` | — |
+
+   Only the code a target framework can run is compiled: the Windows ports on `net10.0` and
+   `net10.0-windows*` (`ESSENTIEABLES_WINDOWS`), the GTK4 branch on `net10.0` (`ESSENTIEABLES_LINUX`), the
+   macOS one on `net10.0-macos`. An Android, iOS or browser head therefore gets no Windows or Linux package.
+   In a multi-platform app, reference it in each head that calls `UseEssentieables()`, not in a shared
+   `net10.0` project, or the heads inherit the desktop packages of that project.
+
+   A package cannot add references from its targets (NuGet ignores package targets while restoring), so a
+   project that receives the Avalonia sources without Essentieables.Avalonia stops with **ESS0001**, which
+   lists the missing packages for its target framework.
 
 2. Register the services on the UI thread, once Avalonia is set up (the UI dispatcher is captured):
 
@@ -342,12 +351,13 @@ The repository holds two packages, each in its own project:
 | Project | Package |
 |---------|---------|
 | [`src/Essentieables`](src/Essentieables) | `Essentieables`: registration, helpers, and the host sources injected into the app (`Avalonia/`, `Blazor/`, `build/Essentieables.targets`) |
+| [`src/Essentieables.Avalonia`](src/Essentieables.Avalonia) | `Essentieables.Avalonia`: no code; Essentieables and the packages of its Avalonia sources, for each target framework (nuspec) |
 | [`src/Essentieables.Facades`](src/Essentieables.Facades) | `Essentieables.Facades`: the MAUI facade accessors and the per-session forwarding facades; no injected sources. `Essentieables` depends on it |
 
 | Project | What it checks |
 |---------|----------------|
-| `tests/Essentieables.Tests` | The MAUI facade accessors still match MAUI's internals; macOS type names; Nominatim parsing, culture-invariant URLs and retries; registration; resolvers; the forwarding facades shared by multi-user hosts (resolver chain, extended facades kept, restored after a replacement). It compiles the Blazor sources as a Blazor Server host and checks the isolation between circuits (services, facades, directories, a circuit never reached from outside of it), the initialization, Preferences and SecureStorage errors, file names and filters, and the schemes the Launcher refuses. |
-| `tests/Consumers/LibraryConsumer` | The injected Avalonia sources compile for each consumer target framework |
+| `tests/Essentieables.Tests` | The MAUI facade accessors still match MAUI's internals; macOS type names; Nominatim parsing, culture-invariant URLs and retries; registration; resolvers; the forwarding facades shared by multi-user hosts (resolver chain, extended facades kept, restored after a replacement); no Windows or GTK4 package or code for Android, iOS, macOS and the browser. It compiles the Blazor sources as a Blazor Server host and checks the isolation between circuits (services, facades, directories, a circuit never reached from outside of it), the initialization, Preferences and SecureStorage errors, file names and filters, and the schemes the Launcher refuses. |
+| `tests/Consumers/LibraryConsumer` | The injected Avalonia sources compile for each consumer target framework, with Essentieables.Avalonia as their only package reference (so Android gets no Windows or GTK4 package) |
 | `tests/Consumers/AvaloniaSmoke` | `UseEssentieables()` runs in a headless Avalonia app and the core services work |
 | `tests/Consumers/BlazorWasmConsumer`, `BlazorServerConsumer` | The Blazor sources compile in both hosts and `BlazorEssentials.js` is copied |
 

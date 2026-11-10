@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/Essentieables/Essentieables.csproj" />
     <Project Path="src/Essentieables.Facades/Essentieables.Facades.csproj" />
+    <Project Path="src/Essentieables.Avalonia/Essentieables.Avalonia.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Essentieables.Tests/Essentieables.Tests.csproj" />
