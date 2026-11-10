@@ -1,4 +1,4 @@
-
+﻿
 
 using System;
 using System.Collections.Concurrent;
@@ -60,6 +60,7 @@ internal sealed class BlazorSecureStorage : ISecureStorage
 
     public async Task<string?> GetAsync(string key)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
         var storageKey = KeyPrefix + key;
         var gate = GetLock(storageKey);
 
@@ -68,21 +69,16 @@ internal sealed class BlazorSecureStorage : ISecureStorage
         await gate.WaitAsync().ConfigureAwait(false);
         try
         {
-            return await BlazorEssentials.Module.InvokeAsync<string?>("secureGet", storageKey)
+            // null: no value (or a value that can no longer be decrypted). Storage or crypto
+            // failures throw, instead of being confused with an empty value.
+            var value = await BlazorEssentials.Module.InvokeAsync<string?>("secureGet", storageKey)
                 .ConfigureAwait(false);
+            if (value is null)
+                _knownKeys.TryRemove(storageKey, out _);
+            else
+                _knownKeys[storageKey] = 0;
+            return value;
         }
-#if DEBUG
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine(ex);
-            return string.Empty;
-        }
-#else
-        catch
-        {
-            return string.Empty;
-        }
-#endif
         finally
         {
             gate.Release();
@@ -91,28 +87,20 @@ internal sealed class BlazorSecureStorage : ISecureStorage
 
     public async Task SetAsync(string key, string value)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        ArgumentNullException.ThrowIfNull(value);
         var storageKey = KeyPrefix + key;
         var gate = GetLock(storageKey);
 
         await gate.WaitAsync().ConfigureAwait(false);
         try
         {
+            // Failures propagate: the caller must not believe an unsaved secret was stored.
             await BlazorEssentials.Module.InvokeVoidAsync("secureSet", storageKey, value)
                 .ConfigureAwait(false);
 
             _knownKeys[storageKey] = 0;
         }
-#if DEBUG
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine(ex);
-        }
-#else
-        catch
-        {
-
-        }
-#endif
         finally
         {
             gate.Release();
@@ -123,33 +111,45 @@ internal sealed class BlazorSecureStorage : ISecureStorage
     {
         var storageKey = KeyPrefix + key;
 
-        // Only proceed if the key was actually known; matches the original
-        // semantics of returning whether something was removed.
-        if (!_knownKeys.TryRemove(storageKey, out _))
-            return false;
-
-        var gate = GetLock(storageKey);
+        // The return value reflects what this instance knows; the removal is queued in any case,
+        // so a value written by another tab is removed too.
+        var known = _knownKeys.TryRemove(storageKey, out _);
 
         // Fire-and-forget: Remove itself stays synchronous, satisfying
         // ISecureStorage. GetAsync/SetAsync on this key will block on the same
         // gate until this finishes, so no caller can observe a stale value.
-        _ = RemoveLockedAsync(gate, storageKey);
-        return true;
+        Track(RemoveLockedAsync(GetLock(storageKey), storageKey));
+        return known;
     }
 
     public void RemoveAll()
     {
-        foreach (var storageKey in _knownKeys.Keys.ToList())
-        {
-            if (!_knownKeys.TryRemove(storageKey, out _))
-                continue;
+        var keys = _knownKeys.Keys.ToList();
+        foreach (var storageKey in keys)
+            _knownKeys.TryRemove(storageKey, out _);
 
-            var gate = GetLock(storageKey);
-            _ = RemoveLockedAsync(gate, storageKey);
+        Track(RemoveAllCoreAsync(keys));
+    }
+
+    private async Task RemoveAllCoreAsync(System.Collections.Generic.List<string> keys)
+    {
+        // Always in the same order, so two concurrent RemoveAll cannot deadlock.
+        var gates = keys.Order(StringComparer.Ordinal).Select(GetLock).ToList();
+        foreach (var gate in gates)
+            await gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            // Every prefixed entry, including those written by other tabs.
+            await BlazorEssentials.Module.InvokeVoidAsync("secureRemoveAll", KeyPrefix).ConfigureAwait(false);
+        }
+        finally
+        {
+            foreach (var gate in gates)
+                gate.Release();
         }
     }
 
-    private async Task RemoveLockedAsync(SemaphoreSlim gate, string storageKey)
+    private static async Task RemoveLockedAsync(SemaphoreSlim gate, string storageKey)
     {
         await gate.WaitAsync().ConfigureAwait(false);
         try
@@ -157,20 +157,55 @@ internal sealed class BlazorSecureStorage : ISecureStorage
             await BlazorEssentials.Module.InvokeVoidAsync("secureRemove", storageKey)
                 .ConfigureAwait(false);
         }
-#if DEBUG
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine(ex);
-        }
-#else
-        catch
-        {
-
-        }
-#endif
         finally
         {
             gate.Release();
         }
+    }
+
+    // ── Background removals: failures are kept and reported by FlushAsync ──────────────
+
+    private readonly object _pendingLock = new();
+    private readonly System.Collections.Generic.HashSet<Task> _pending = [];
+    private readonly ConcurrentQueue<Exception> _errors = new();
+
+    private void Track(Task operation)
+    {
+        lock (_pendingLock)
+            _pending.Add(operation);
+
+        _ = operation.ContinueWith(t =>
+        {
+            if (t.Exception is { } ex)
+                _errors.Enqueue(ex.InnerException ?? ex);
+            lock (_pendingLock)
+                _pending.Remove(t);
+        }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+    }
+
+    /// <summary>
+    /// Waits for the queued Remove/RemoveAll operations and throws if any of them failed since the
+    /// last call, so a caller can make sure a secret is really gone (for example on sign-out).
+    /// </summary>
+    public async Task FlushAsync()
+    {
+        Task[] pending;
+        lock (_pendingLock)
+            pending = [.. _pending];
+
+        try
+        {
+            await Task.WhenAll(pending).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Collected below through the continuation.
+        }
+
+        var errors = new System.Collections.Generic.List<Exception>();
+        while (_errors.TryDequeue(out var error))
+            errors.Add(error);
+        if (errors.Count > 0)
+            throw new AggregateException("One or more secure storage removals failed.", errors);
     }
 }

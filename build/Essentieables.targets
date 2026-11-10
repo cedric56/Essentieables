@@ -5,6 +5,7 @@
     that are neither Avalonia nor Blazor (the ViewModels library) get nothing.
 
       Blazor   : project uses Microsoft.NET.Sdk.Web or Microsoft.NET.Sdk.BlazorWebAssembly
+                 (Web SDK outside the browser = Blazor Server: ESSENTIEABLES_BLAZOR_SERVER, per-circuit services)
       Avalonia : project references Avalonia (directly, transitively or via a ProjectReference)
 
     To override detection: <EssentieablesHost>Avalonia</EssentieablesHost>, Blazor, or None.
@@ -83,6 +84,17 @@
     <ItemGroup Condition="'$(_EssentieablesBlazor)' == 'true'">
       <Compile Include="$(_EssentieablesSources)Blazor\**\*.cs" />
     </ItemGroup>
+
+    <!-- Blazor Server (Web SDK, not running in the browser): one set of services per circuit.
+         Set <EssentieablesBlazorServer>false</EssentieablesBlazorServer> in a Web SDK project that only hosts
+         a WebAssembly client and never renders interactive server components. -->
+    <PropertyGroup Condition="'$(_EssentieablesBlazor)' == 'true'
+                              and '$(EssentieablesBlazorServer)' != 'false'
+                              and '$(_EssentieablesIsBrowser)' != 'true'
+                              and '$(UsingMicrosoftNETSdkBlazorWebAssembly)' != 'true'
+                              and ('$(UsingMicrosoftNETSdkWeb)' == 'true' or '$(EssentieablesBlazorServer)' == 'true')">
+      <DefineConstants>$(DefineConstants);ESSENTIEABLES_BLAZOR_SERVER</DefineConstants>
+    </PropertyGroup>
   </Target>
 
   <!-- Blazor: the JS module is imported from ./BlazorEssentials.js, so it is copied to wwwroot/. -->

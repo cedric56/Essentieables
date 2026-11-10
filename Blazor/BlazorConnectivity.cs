@@ -27,9 +27,12 @@ internal sealed class BlazorConnectivity : IConnectivity, IAsyncDisposable
             var snapshot = await BlazorEssentials.Module.InvokeAsync<BrowserState?>("connectivityGetSnapshot");
             if (snapshot is not null)
                 Apply(snapshot, false);
-            _ref?.Dispose();
+            // connectivitySubscribe removes the previous JS handler first; the previous .NET
+            // reference is only disposed after that, so no handler can call a disposed reference.
+            var previous = _ref;
             _ref = DotNetObjectReference.Create(this);
             await BlazorEssentials.Module.InvokeVoidAsync("connectivitySubscribe", _ref);
+            previous?.Dispose();
         }
 #if DEBUG
         catch (Exception ex)
@@ -76,10 +79,11 @@ internal sealed class BlazorConnectivity : IConnectivity, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        _ref?.Dispose();
+        var reference = _ref;
+        _ref = null;
         try
-        { 
-            await BlazorEssentials.Module.InvokeVoidAsync("connectivityUnsubscribe");   
+        {
+            await BlazorEssentials.Module.InvokeVoidAsync("connectivityUnsubscribe");
         }
 #if DEBUG
         catch (Exception ex)
@@ -92,5 +96,9 @@ internal sealed class BlazorConnectivity : IConnectivity, IAsyncDisposable
 
         }
 #endif
+        finally
+        {
+            reference?.Dispose();
+        }
     }
 }

@@ -79,41 +79,59 @@ function openPopup(innerHtml, { onClose } = {}) {
 	document.body.appendChild(overlay);
 
 	let resolvePromise;
-	const promise = new Promise(resolve => (resolvePromise = resolve));
+	let rejectPromise;
+	const promise = new Promise((resolve, reject) => { resolvePromise = resolve; rejectPromise = reject; });
 	let closed = false;
 
 	const onKeyDown = e => { if (e.key === "Escape") close(null); };
 	const onBeforeUnload = () => close(null);
 
-	function close(result) {
+	/** Closes the popup; resolves with `result`, or rejects when `error` is given. */
+	function close(result, error) {
 		if (closed) return;
 		closed = true;
 
-		onClose?.();
+		try { onClose?.(); } catch (e) { console.error(e); }
 		document.removeEventListener("keydown", onKeyDown);
 		window.removeEventListener("beforeunload", onBeforeUnload);
 		overlay.remove();
-		resolvePromise(result);
+		if (error) rejectPromise(error);
+		else resolvePromise(result);
 	}
+
+	const isClosed = () => closed;
 
 	overlay.addEventListener("click", e => { if (e.target === overlay) close(null); });
 	document.addEventListener("keydown", onKeyDown);
 	window.addEventListener("beforeunload", onBeforeUnload);
 
 	const $ = selector => modal.querySelector(selector);
-	return { $, close, promise };
+	return { $, close, isClosed, promise };
 }
 
-/** Requests the camera; returns the stream or null if denied/unavailable. */
+/** True when the camera can be requested in this context (secure context + getUserMedia). */
+export function captureIsSupported() {
+	return !!(globalThis.isSecureContext && navigator.mediaDevices?.getUserMedia);
+}
+
+/**
+ * Requests the camera. Rejects with Error("permission") when the user or the browser policy
+ * refuses it, Error("unsupported") when there is no camera API, Error(message) otherwise.
+ */
 async function openCamera({ audio = false } = {}) {
+	if (!captureIsSupported())
+		throw new Error("unsupported");
 	try {
 		return await navigator.mediaDevices.getUserMedia({
 			video: VIDEO_SIZE,
 			...(audio ? { audio: AUDIO_CONSTRAINTS } : {})
 		});
 	} catch (err) {
-		console.error("Camera access denied:", err);
-		return null;
+		if (err?.name === "NotAllowedError" || err?.name === "SecurityError")
+			throw new Error("permission");
+		if (err?.name === "NotFoundError" || err?.name === "OverconstrainedError")
+			throw new Error("unsupported");
+		throw new Error(err?.message || "camera");
 	}
 }
 
@@ -122,7 +140,7 @@ async function openCamera({ audio = false } = {}) {
 export function capturePhotoInPopup() {
 	let stream = null;
 
-	const { $, close, promise } = openPopup(`
+	const { $, close, isClosed, promise } = openPopup(`
 		<style>
 			.cp-root {
 				--cp-bg: #0f1115;
@@ -317,7 +335,7 @@ export function capturePhotoInPopup() {
 
 	function acceptPhoto() {
 		canvas.toBlob(
-			blob => close(blob ? URL.createObjectURL(blob) : null),
+			blob => close(blob ? { url: URL.createObjectURL(blob), type: blob.type || "image/png" } : null),
 			"image/png"
 		);
 	}
@@ -327,11 +345,13 @@ export function capturePhotoInPopup() {
 	$("#rejectPhoto").addEventListener("click", showPreview);
 
 	openCamera().then(s => {
-		if (!s) return close(null);
+		// The popup may have been dismissed while the permission prompt was open:
+		// release the camera instead of leaving it running.
+		if (isClosed()) return stopStream(s);
 		stream = s;
 		video.srcObject = stream;
 		setStatus("Live");
-	});
+	}, err => close(null, err));
 
 	return promise;
 }
@@ -343,8 +363,14 @@ export function captureVideoInPopup() {
 	let recorder = null;
 	let chunks = [];
 	let mimeType = "";
+	let playbackUrl = null;
 
-	const { $, close, promise } = openPopup(`
+	const revokePlayback = () => {
+		if (playbackUrl) URL.revokeObjectURL(playbackUrl);
+		playbackUrl = null;
+	};
+
+	const { $, close, isClosed, promise } = openPopup(`
 		<style>
 			.cv-root {
 				--cv-bg: #0f1115;
@@ -507,7 +533,16 @@ export function captureVideoInPopup() {
 				</div>
 			</div>
 		</div>
-	`, { onClose: () => stopStream(stream) });
+	`, {
+		onClose: () => {
+			if (recorder && recorder.state !== "inactive") {
+				recorder.onstop = null;
+				recorder.stop();
+			}
+			stopStream(stream);
+			revokePlayback();
+		}
+	});
 
 	const preview = $("#videoPreview");
 	const playback = $("#playbackPreview");
@@ -528,8 +563,14 @@ export function captureVideoInPopup() {
 	const buildBlob = () => new Blob(chunks, { type: mimeType || "video/webm" });
 
 	async function startCamera() {
-		stream = await openCamera({ audio: true });
-		if (!stream) return close(null);
+		let s;
+		try {
+			s = await openCamera({ audio: true });
+		} catch (err) {
+			return close(null, err);
+		}
+		if (isClosed()) return stopStream(s);
+		stream = s;
 		preview.srcObject = stream;
 		setStatus("Ready");
 		hint.textContent = "Position yourself, then start recording.";
@@ -541,6 +582,9 @@ export function captureVideoInPopup() {
 		startButton.disabled = true;
 		stopButton.disabled = false;
 		hide(actions);
+
+		if (typeof MediaRecorder === "undefined")
+			return close(null, new Error("unsupported"));
 
 		chunks = [];
 		mimeType = pickVideoMimeType();
@@ -563,7 +607,9 @@ export function captureVideoInPopup() {
 	}
 
 	function showPlayback() {
-		playback.src = URL.createObjectURL(buildBlob());
+		revokePlayback();
+		playbackUrl = URL.createObjectURL(buildBlob());
+		playback.src = playbackUrl;
 		playback.controls = true;
 		playback.muted = false;
 		playback.autoplay = false;
@@ -574,11 +620,12 @@ export function captureVideoInPopup() {
 	}
 
 	function acceptCapture() {
-		close(URL.createObjectURL(buildBlob()));
+		const blob = buildBlob();
+		close({ url: URL.createObjectURL(blob), type: blob.type || "video/webm" });
 	}
 
 	function rejectCapture() {
-		if (playback.src) URL.revokeObjectURL(playback.src);
+		revokePlayback();
 		playback.removeAttribute("src");
 		playback.muted = true;
 		chunks = [];
@@ -603,34 +650,38 @@ export function captureVideoInPopup() {
 	return promise;
 }
 
-export async function getBlobBytes(blobUrl) {
-	const response = await fetch(blobUrl);
-	const buffer = await response.arrayBuffer(); // no need for .blob() first
-	URL.revokeObjectURL(blobUrl);
-	return new Uint8Array(buffer);
+/**
+ * Returns the content of a blob: URL created by the capture popups and revokes the URL.
+ * Received in .NET as an IJSStreamReference (streamed, so it is not limited by the SignalR
+ * message size on Blazor Server).
+ */
+export async function takeBlob(blobUrl) {
+	try {
+		const response = await fetch(blobUrl);
+		return await response.blob();
+	} finally {
+		URL.revokeObjectURL(blobUrl);
+	}
 }
 
 // ---------- Contacts -----------
 
-export function getAllContactsAsync(multiple) {
-	return new Promise(async (resolve, reject) => {
-		if ('ContactsManager' in window) {
+export function contactsIsSupported() {
+	return 'contacts' in navigator && 'ContactsManager' in window;
+}
 
-			const opts = { multiple: multiple };
-			const contacts = await navigator.contacts.select(["name", "email", "tel", "address"], opts);
-			const contactsJson = contacts.map(voice => ({
-				name: voice.name,
-				email: voice.email,
-				tel: voice.tel,
-				address: voice.address,
-			}));
-			resolve(JSON.stringify(contactsJson, null, 2));
-			return;
-		}
+/** Opens the Contact Picker. Rejections (permission, user activation…) reach .NET as JSException. */
+export async function getAllContactsAsync(multiple) {
+	if (!contactsIsSupported())
+		throw new Error("unsupported");
 
-		resolve('');
-
-	});
+	const contacts = await navigator.contacts.select(["name", "email", "tel", "address"], { multiple: !!multiple });
+	return JSON.stringify(contacts.map(c => ({
+		name: c.name,
+		email: c.email,
+		tel: c.tel,
+		address: c.address,
+	})));
 }
 
 // ---------- Preferences (localStorage) ----------
@@ -646,6 +697,14 @@ export function prefsGetAll(prefix) {
 
 export function prefsSet(key, value) { localStorage.setItem(key, value); }
 export function prefsRemove(key) { localStorage.removeItem(key); }
+export function prefsClear(prefix) {
+	const keys = [];
+	for (let i = 0; i < localStorage.length; i++) {
+		const k = localStorage.key(i);
+		if (k && k.startsWith(prefix)) keys.push(k);
+	}
+	keys.forEach(k => localStorage.removeItem(k));
+}
 
 
 function bytesToBase64(bytes) {
@@ -679,26 +738,54 @@ function ssOpenDb() {
 	});
 }
 
-async function ssGetOrCreateKey() {
-	const db = await ssOpenDb();
-	const existing = await new Promise((res, rej) => {
+function ssReadKey(db) {
+	return new Promise((res, rej) => {
 		const tx = db.transaction(SS_STORE, "readonly");
 		const req = tx.objectStore(SS_STORE).get(SS_KEY_ID);
 		req.onsuccess = () => res(req.result);
 		req.onerror = () => rej(req.error);
 	});
-	if (existing) return existing;
+}
 
-	const key = await crypto.subtle.generateKey(
-		{ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+let ssKeyPromise = null;
 
-	await new Promise((res, rej) => {
-		const tx = db.transaction(SS_STORE, "readwrite");
-		tx.objectStore(SS_STORE).put(key, SS_KEY_ID);
-		tx.oncomplete = () => res();
-		tx.onerror = () => rej(tx.error);
-	});
-	return key;
+/**
+ * Returns the AES key, creating it on first use. Two tabs may both find no key: the candidate
+ * is only stored by a readwrite transaction that checks again for an existing key, and readwrite
+ * transactions on the same store are serialized by IndexedDB across tabs, so every tab ends up
+ * with the same key (no value is encrypted with a key that is later overwritten).
+ */
+function ssGetOrCreateKey() {
+	if (!ssKeyPromise) {
+		ssKeyPromise = (async () => {
+			if (!globalThis.indexedDB || !globalThis.crypto?.subtle)
+				throw new Error("unsupported");
+
+			const db = await ssOpenDb();
+			const existing = await ssReadKey(db);
+			if (existing) return existing;
+
+			const candidate = await crypto.subtle.generateKey(
+				{ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+
+			return await new Promise((res, rej) => {
+				const tx = db.transaction(SS_STORE, "readwrite");
+				const store = tx.objectStore(SS_STORE);
+				let key = candidate;
+				const req = store.get(SS_KEY_ID);
+				req.onsuccess = () => {
+					if (req.result) key = req.result;          // another tab won the race
+					else store.add(candidate, SS_KEY_ID);
+				};
+				tx.oncomplete = () => res(key);
+				tx.onerror = () => rej(tx.error);
+				tx.onabort = () => rej(tx.error);
+			});
+		})();
+		// Retry on the next call after a failure instead of caching the rejection.
+		ssKeyPromise.catch(() => { ssKeyPromise = null; });
+	}
+	return ssKeyPromise;
 }
 
 export function secureKeys(prefix) {
@@ -714,8 +801,10 @@ export async function secureGet(storageKey) {
 	const raw = localStorage.getItem(storageKey);
 	if (!raw) return null;
 
+	// Key or storage failures propagate to .NET. Only an undecryptable value (key lost after
+	// site data was partly cleared, corrupted entry) reads as missing, as on the native platforms.
+	const key = await ssGetOrCreateKey();
 	try {
-		const key = await ssGetOrCreateKey();
 		const { iv, data } = JSON.parse(raw);
 		const plainBuf = await crypto.subtle.decrypt(
 			{ name: "AES-GCM", iv: new Uint8Array(iv) },
@@ -723,7 +812,8 @@ export async function secureGet(storageKey) {
 			new Uint8Array(data));
 		return new TextDecoder().decode(plainBuf);
 	} catch {
-		return null; // key regenerated or corrupted value
+		localStorage.removeItem(storageKey);
+		return null;
 	}
 }
 
@@ -743,6 +833,12 @@ export async function secureSet(storageKey, value) {
 
 export function secureRemove(storageKey) {
 	localStorage.removeItem(storageKey);
+}
+
+/** Removes every entry with the prefix, including the ones written by other tabs. */
+export function secureRemoveAll(prefix) {
+	for (const k of secureKeys(prefix))
+		localStorage.removeItem(k);
 }
 
 // ---------- Clipboard ----------
@@ -883,6 +979,27 @@ export function ddUnsubscribe() {
 }
 // ---------- Geolocation ----------
 
+// GeolocationPositionError codes → names understood by BlazorGeolocation.
+function geoErrorName(error) {
+	switch (error?.code) {
+		case 1: return "permission";
+		case 2: return "unavailable";
+		case 3: return "timeout";
+		default: return error?.message || "unknown";
+	}
+}
+
+export async function geoIsEnabled() {
+	if (!globalThis.navigator.geolocation || !globalThis.isSecureContext)
+		return false;
+	try {
+		const status = await navigator.permissions?.query({ name: "geolocation" });
+		return status?.state !== "denied";
+	} catch {
+		return true; // Permissions API not available: the browser will ask.
+	}
+}
+
 function positionToPayload(position) {
 	const c = position.coords;
 
@@ -904,12 +1021,14 @@ export function geoGetCurrentPosition(enableHighAccuracy, timeoutMs) {
 			reject(new Error("unsupported"));
 			return;
 		}
+		if (!globalThis.isSecureContext) {
+			reject(new Error("insecure"));
+			return;
+		}
 
 		globalThis.navigator.geolocation.getCurrentPosition(
 			position => resolve(positionToPayload(position)),
-			error => reject(
-				new Error(error.code === 1 ? "permission" : error.message)
-			),
+			error => reject(new Error(geoErrorName(error))),
 			{
 				enableHighAccuracy,
 				timeout: timeoutMs > 0 ? timeoutMs : Infinity,
@@ -934,7 +1053,7 @@ export function geoWatchStart(dotNetRef, enableHighAccuracy) {
 			dotNetRef
 				.invokeMethodAsync(
 					"OnGeolocationError",
-					error.code === 1 ? "permission" : error.message)
+					geoErrorName(error))
 				.catch(() => { });
 		},
 		{
@@ -1056,24 +1175,66 @@ export function shareFiles(title, namesJson, typesJson, base64Json) {
 
 // ---------- Launcher / browser ----------
 
+const WEB_SCHEMES = ["http:", "https:"];
+const NAVIGATION_SCHEMES = ["mailto:", "tel:", "sms:"];
+
+function hasScheme(url, schemes) {
+	try {
+		return schemes.includes(new URL(url, globalThis.document.baseURI).protocol);
+	} catch {
+		return false;
+	}
+}
+
 export function openUrl(url) {
-	// noopener so the opened page cannot script this app.
-	return globalThis.window.open(url, '_blank', 'noopener') !== null;
+	// Checked again here: javascript:, data:, blob:, file:… are never opened.
+	if (!hasScheme(url, WEB_SCHEMES))
+		return false;
+	// window.open(..., "noopener") always returns null, so the popup blocker could not be detected:
+	// open a blank window, cut the opener, then navigate.
+	const w = globalThis.window.open("about:blank", "_blank");
+	if (!w)
+		return false;
+	w.opener = null;
+	w.location.href = url;
+	return true;
 }
 
 export function navigateTo(url) {
 	// Used for protocol-handler schemes (mailto:, tel:, sms:) — does not unload the app.
+	if (!hasScheme(url, NAVIGATION_SCHEMES))
+		return false;
 	globalThis.location.assign(url);
 	return true;
 }
 
-export function openFileBlob(base64, contentType, name) {
-	const blob = new Blob([base64ToBytes(base64)], { type: contentType || 'application/octet-stream' });
+// A blob: URL has the origin of the app: an HTML/SVG/XML file opened from one could run script
+// with access to this origin (localStorage, the SecureStorage key…). Those types are downloaded.
+const ACTIVE_CONTENT = /^(text\/html|application\/xhtml\+xml|image\/svg\+xml|text\/xml|application\/xml|text\/javascript|application\/javascript|application\/x-javascript)\b/i;
+
+export async function openFileStream(streamRef, contentType, name) {
+	const type = contentType || 'application/octet-stream';
+	const blob = new Blob([await streamRef.arrayBuffer()], { type: ACTIVE_CONTENT.test(type) ? 'application/octet-stream' : type });
 	const url = URL.createObjectURL(blob);
-	const opened = globalThis.window.open(url, '_blank');
 	// Give the new tab time to load before revoking.
 	setTimeout(() => URL.revokeObjectURL(url), 60000);
-	return opened !== null;
+
+	if (ACTIVE_CONTENT.test(type)) {
+		const a = document.createElement("a");
+		a.href = url;
+		a.download = name || "download";
+		a.rel = "noopener";
+		document.body.appendChild(a);
+		a.click();
+		a.remove();
+		return true;
+	}
+
+	const w = globalThis.window.open(url, '_blank');
+	if (!w)
+		return false;
+	w.opener = null;
+	return true;
 }
 
 
@@ -1135,7 +1296,7 @@ export function sensorIsSupported(kind) {
 	switch (kind) {
 		case "accelerometer":
 		case "gyroscope":
-			//return "DeviceMotionEvent" in globalThis;
+			return "DeviceMotionEvent" in globalThis;
 
 		case "orientation":
 		case "compass":
@@ -1155,12 +1316,12 @@ export async function sensorStart(dotNetRef, kind, frequencyHz) {
 		return false;
 
 	// iOS Safari requires an explicit permission request.
-	const eventCtor = globalThis.DeviceOrientationEvent;
-		// kind === "accelerometer" || kind === "gyroscope"
-		// 	? globalThis.DeviceMotionEvent
-		// 	: globalThis.DeviceOrientationEvent;
+	const eventCtor =
+		kind === "accelerometer" || kind === "gyroscope"
+			? globalThis.DeviceMotionEvent
+			: globalThis.DeviceOrientationEvent;
 
-	if (typeof eventCtor.requestPermission === "function") {
+	if (typeof eventCtor?.requestPermission === "function") {
 		const state = await eventCtor.requestPermission();
 
 		if (state !== "granted")
@@ -1279,11 +1440,12 @@ export function sensorStop(kind) {
 
 // ---------- App package files (fetch relative to base URL) ----------
 
+/** Returns the file as a Blob (an IJSStreamReference in .NET), or null when it does not exist. */
 export async function fetchAppFile(path) {
 	const response = await globalThis.fetch(new URL(path, globalThis.document.baseURI), { method: 'GET' });
 	if (!response.ok)
 		return null;
-	return bytesToBase64(new Uint8Array(await response.arrayBuffer()));
+	return await response.blob();
 }
 
 export async function appFileExists(path) {
@@ -1346,7 +1508,7 @@ export function connectivityGetSnapshot() {
 export function connectivitySubscribe(dotNetRef) {
 	connectivityUnsubscribe();
 	connectivityHandler = () =>
-		dotNetRef.invokeMethodAsync("OnBrowserChanged", readConnectivity());
+		dotNetRef.invokeMethodAsync("OnBrowserChanged", readConnectivity()).catch(() => { });
 	window.addEventListener("online", connectivityHandler);
 	window.addEventListener("offline", connectivityHandler);
 	navigator.connection?.addEventListener("change", connectivityHandler);
@@ -1376,7 +1538,7 @@ let appInfoHandler = null;
 export function appInfoSubscribeTheme(dotNetRef) {
 	appInfoUnsubscribeTheme();
 	appInfoMql = window.matchMedia("(prefers-color-scheme: dark)");
-	appInfoHandler = e => dotNetRef.invokeMethodAsync("OnThemeChanged", e.matches);
+	appInfoHandler = e => dotNetRef.invokeMethodAsync("OnThemeChanged", e.matches).catch(() => { });
 	appInfoMql.addEventListener("change", appInfoHandler);
 }
 
@@ -1388,39 +1550,63 @@ export function appInfoUnsubscribeTheme() {
 	appInfoHandler = null;
 }
 
+// Files picked by the user, kept until .NET has streamed them (see BlazorFilePicker).
+const pickedFiles = new Map();
+let pickSequence = 0;
+
+/**
+ * Shows the file dialog. Resolves with null when the user cancels, otherwise with
+ * { token, files: [{ name, type, size }] }; the contents are then read with pickedFileData().
+ */
 export function pickFiles(title, accept, multiple) {
-	return new Promise(resolve => {
+	return new Promise((resolve, reject) => {
 		const input = document.createElement("input");
 		input.type = "file";
 		input.multiple = !!multiple;
 		if (accept) input.accept = accept;
-		if (title) {
-			input.setAttribute("aria-label", title);
-		}
+		if (title) input.setAttribute("aria-label", title);
 		input.style.display = "none";
 
-		input.addEventListener("change", async () => {
-			const files = Array.from(input.files ?? []);
-			const results = await Promise.all(files.map(f => new Promise((res, rej) => {
-				const reader = new FileReader();
-				reader.onload = async () => {
-					// const base64 = reader.result.substring(reader.result.indexOf(",") + 1);
-					// res({ name: f.name, type: f.type, dataBase64: base64 });
-					const arrayBuffer = await f.arrayBuffer();
-					const bytes = new Uint8Array(arrayBuffer);
-					res({ name: f.name, type: f.type, data: bytes });
-				};
-				reader.onerror = () => rej(reader.error);
-				reader.readAsDataURL(f);
-			})));
-			document.body.removeChild(input);
-			resolve(results);
-		});
+		let settled = false;
+		const finish = files => {
+			if (settled) return;
+			settled = true;
+			input.remove();
+			if (!files.length) {
+				resolve(null);
+				return;
+			}
+			const token = ++pickSequence;
+			pickedFiles.set(token, files);
+			resolve({ token, files: files.map(f => ({ name: f.name, type: f.type, size: f.size })) });
+		};
+
+		input.addEventListener("change", () => finish(Array.from(input.files ?? [])));
+		// Fired when the dialog is closed without a selection (Chrome 113+, Firefox 91+, Safari 16.4+).
+		input.addEventListener("cancel", () => finish([]));
 
 		// Some browsers require the input to be in the DOM to show the dialog reliably.
 		document.body.appendChild(input);
-		input.click();
+		try {
+			input.click();
+		} catch (e) {
+			settled = true;
+			input.remove();
+			reject(e);
+		}
 	});
+}
+
+/** The picked File (a Blob, streamed to .NET as an IJSStreamReference). */
+export function pickedFileData(token, index) {
+	const file = pickedFiles.get(token)?.[index];
+	if (!file)
+		throw new Error("The picked file is no longer available.");
+	return file;
+}
+
+export function releasePickedFiles(token) {
+	pickedFiles.delete(token);
 }
 
 // ---------- WebAuthenticator ----------

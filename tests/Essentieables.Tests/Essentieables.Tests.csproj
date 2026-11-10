@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -8,6 +8,8 @@
     <!-- The Blazor sources are compiled in here, as the package does in a Blazor host:
          this also makes the test build fail if they stop compiling. -->
     <NoWarn>$(NoWarn);CS1998;CS4014</NoWarn>
+    <!-- Compiled as a Blazor Server host: the per-circuit isolation is what the tests cover. -->
+    <DefineConstants>$(DefineConstants);ESSENTIEABLES_BLAZOR_SERVER</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>

@@ -1,4 +1,4 @@
-
+﻿
 
 using System;
 using System.Collections.Concurrent;
@@ -31,6 +31,21 @@ internal sealed class BlazorPreferences : IPreferences
     private const string KeyPrefix = "maui:prefs:";
 
     private readonly ConcurrentDictionary<string, string> _cache = new();
+
+    // Keys written or removed before InitializeAsync finished loading: the loaded values must not
+    // overwrite them.
+    private readonly ConcurrentDictionary<string, byte> _touchedBeforeLoad = new();
+    private readonly ConcurrentDictionary<string, byte> _clearedBeforeLoad = new();
+    private volatile bool _loaded;
+
+    /// <summary>True once the values stored in localStorage have been loaded.</summary>
+    public bool IsLoaded => _loaded;
+
+    private void Touch(string storageKey)
+    {
+        if (!_loaded)
+            _touchedBeforeLoad[storageKey] = 0;
+    }
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new();
 
     private static string GetContainer(string? sharedName) => KeyPrefix + (sharedName ?? "_default") + ":";
@@ -51,7 +66,14 @@ internal sealed class BlazorPreferences : IPreferences
                 .ConfigureAwait(false);
 
             foreach (var (k, v) in all ?? [])
-                _cache[k] = v;
+            {
+                if (!_touchedBeforeLoad.ContainsKey(k)
+                    && !_clearedBeforeLoad.Keys.Any(prefix => k.StartsWith(prefix, StringComparison.Ordinal)))
+                    _cache.TryAdd(k, v);
+            }
+            _loaded = true;
+            _touchedBeforeLoad.Clear();
+            _clearedBeforeLoad.Clear();
         }
 #if DEBUG
         catch (Exception ex)
@@ -72,15 +94,24 @@ internal sealed class BlazorPreferences : IPreferences
     public void Remove(string key, string? sharedName = null)
     {
         var storageKey = GetStorageKey(key, sharedName);
-        if (_cache.TryRemove(storageKey, out _))
+        Touch(storageKey);
+        // Before the load, the key may exist in localStorage without being in the cache yet.
+        if (_cache.TryRemove(storageKey, out _) || !_loaded)
             TrackPersistence(() => PersistRemoveAsync(storageKey));
     }
 
     public void Clear(string? sharedName = null)
     {
         var prefix = GetContainer(sharedName);
+        if (!_loaded)
+        {
+            // Entries not loaded yet are cleared in localStorage and skipped by the load.
+            _clearedBeforeLoad[prefix] = 0;
+            TrackPersistence(() => PersistClearAsync(prefix));
+        }
         foreach (var storageKey in _cache.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).ToList())
         {
+            Touch(storageKey);
             if (_cache.TryRemove(storageKey, out _))
                 TrackPersistence(() => PersistRemoveAsync(storageKey));
         }
@@ -88,29 +119,51 @@ internal sealed class BlazorPreferences : IPreferences
 
     public void Set<T>(string key, T value, string? sharedName = null)
     {
+        EnsureSupported<T>();
         var storageKey = GetStorageKey(key, sharedName);
+        Touch(storageKey);
 
         if (value is null)
         {
-            if (_cache.TryRemove(storageKey, out _))
+            if (_cache.TryRemove(storageKey, out _) || !_loaded)
                 TrackPersistence(() => PersistRemoveAsync(storageKey));
             return;
         }
 
-        var stored = value switch
-        {
-            DateTime dt => dt.ToString("O", CultureInfo.InvariantCulture),
-            DateTimeOffset dto => dto.ToString("O", CultureInfo.InvariantCulture),
-            IConvertible c => c.ToString(CultureInfo.InvariantCulture),
-            _ => value.ToString() ?? string.Empty,
-        };
+        var stored = Serialize(value);
 
         _cache[storageKey] = stored;
         TrackPersistence(() => PersistSetAsync(storageKey, stored));
     }
 
+    // The types MAUI Preferences supports; the others throw NotSupportedException there too,
+    // instead of being silently turned into a string that cannot be read back.
+    private static readonly Type[] SupportedTypes =
+    [
+        typeof(string), typeof(bool), typeof(int), typeof(long), typeof(float), typeof(double),
+        typeof(DateTime), typeof(DateTimeOffset),
+    ];
+
+    internal static void EnsureSupported<T>()
+    {
+        var type = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
+        if (Array.IndexOf(SupportedTypes, type) < 0)
+            throw new NotSupportedException($"Preferences does not support values of type {typeof(T).Name}.");
+    }
+
+    internal static string Serialize<T>(T value) => value switch
+    {
+        DateTime dt => dt.ToString("O", CultureInfo.InvariantCulture),
+        DateTimeOffset dto => dto.ToString("O", CultureInfo.InvariantCulture),
+        float f => f.ToString("R", CultureInfo.InvariantCulture),
+        double d => d.ToString("R", CultureInfo.InvariantCulture),
+        IConvertible c => c.ToString(CultureInfo.InvariantCulture),
+        _ => throw new NotSupportedException($"Preferences does not support values of type {typeof(T).Name}."),
+    };
+
     public T Get<T>(string key, T defaultValue, string? sharedName = null)
     {
+        EnsureSupported<T>();
         if (!_cache.TryGetValue(GetStorageKey(key, sharedName), out var stored))
             return defaultValue;
 
@@ -140,22 +193,16 @@ internal sealed class BlazorPreferences : IPreferences
         {
             await BlazorEssentials.Module.InvokeVoidAsync("prefsSet", storageKey, value)
                 .ConfigureAwait(false);
-        }        
-#if DEBUG
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine(ex);
         }
-#else
-        catch
-        {
-
-        }
-#endif
         finally
         {
             gate.Release();
         }
+    }
+
+    private static async Task PersistClearAsync(string prefix)
+    {
+        await BlazorEssentials.Module.InvokeVoidAsync("prefsClear", prefix).ConfigureAwait(false);
     }
 
     private async Task PersistRemoveAsync(string storageKey)
@@ -167,17 +214,6 @@ internal sealed class BlazorPreferences : IPreferences
             await BlazorEssentials.Module.InvokeVoidAsync("prefsRemove", storageKey)
                 .ConfigureAwait(false);
         }
-#if DEBUG
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine(ex);
-        }
-#else
-        catch
-        {
-
-        }
-#endif
         finally
         {
             gate.Release();

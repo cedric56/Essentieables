@@ -88,13 +88,13 @@ public class RegistrationTests
     }
 
     [Fact]
-    public void RegisterAvaeEssentials_keeps_existing_registrations()
+    public void RegisterEssentieables_keeps_existing_registrations()
     {
         var mine = Substitute.For<IPreferences>();
         var services = new ServiceCollection();
         services.AddSingleton(mine);
 
-        services.RegisterAvaeEssentials();
+        services.RegisterEssentieables();
 
         using var provider = services.BuildServiceProvider();
         Assert.Same(mine, provider.GetRequiredService<IPreferences>());

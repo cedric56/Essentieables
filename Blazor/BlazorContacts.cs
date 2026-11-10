@@ -1,4 +1,5 @@
 ﻿
+using Microsoft.Maui.ApplicationModel;
 
 using Microsoft.JSInterop;
 using Microsoft.Maui.ApplicationModel.Communication;
@@ -12,49 +13,31 @@ using System.Threading.Tasks;
 
 namespace Essentieables;
 
-/// <summary>Contacts are not accessible from the browser (the Contact Picker API is not broadly available).</summary>
+/// <summary>Contact Picker API: Chrome on Android only; elsewhere the calls throw FeatureNotSupportedException.</summary>
 internal class BlazorContacts : IContacts
 {
     public async Task<IEnumerable<Contact>> GetAllAsync(CancellationToken cancellationToken = default)
-    {
-        try
-        { 
-            var result = await BlazorEssentials.Module.InvokeAsync<string>("getAllContactsAsync", true);
-            return Parse(result);   
-        }
-#if DEBUG
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine(ex);
-            return Parse(string.Empty);
-        }
-#else
-        catch
-        {
-            return Parse(string.Empty);
-        }
-#endif
-    }
+        => Parse(await SelectAsync(multiple: true, cancellationToken).ConfigureAwait(false));
 
     public async Task<Contact?> PickContactAsync()
+        => Parse(await SelectAsync(multiple: false, CancellationToken.None).ConfigureAwait(false)).FirstOrDefault();
+
+    /// <summary>Contact Picker API (Chrome on Android). The user cancelling returns no contact.</summary>
+    static async Task<string> SelectAsync(bool multiple, CancellationToken cancellationToken)
     {
         try
-        { 
-            var result = await BlazorEssentials.Module.InvokeAsync<string>("getAllContactsAsync", false);
-            return Parse(result).FirstOrDefault();
-        }
-#if DEBUG
-        catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine(ex);
-            return Parse(string.Empty).FirstOrDefault();
+            return await BlazorEssentials.Module.InvokeAsync<string>("getAllContactsAsync", cancellationToken, multiple).ConfigureAwait(false);
         }
-#else
-        catch
+        catch (JSException ex) when (ex.Message.Contains("unsupported", StringComparison.OrdinalIgnoreCase))
         {
-            return Parse(string.Empty).FirstOrDefault();
+            throw new FeatureNotSupportedException("The Contact Picker API is not available in this browser.");
         }
-#endif
+        catch (JSException ex) when (ex.Message.Contains("SecurityError", StringComparison.OrdinalIgnoreCase)
+                                     || ex.Message.Contains("NotAllowedError", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new PermissionException("The contact picker was refused (it needs a user gesture and a secure context).");
+        }
     }
 
     private static List<Contact> Parse(string result)

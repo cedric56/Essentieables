@@ -35,9 +35,11 @@ internal sealed class BlazorAppInfo : IAppInfo, IAsyncDisposable
             var snapshot = await BlazorEssentials.Module.InvokeAsync<AppInfoSnapshot>("appInfoGet");
             if (snapshot != null)
                 Apply(snapshot);
-            _ref?.Dispose();
+            // appInfoSubscribeTheme drops the previous JS handler first: dispose the old reference after it.
+            var previous = _ref;
             _ref = DotNetObjectReference.Create(this);
             await BlazorEssentials.Module.InvokeVoidAsync("appInfoSubscribeTheme", _ref);
+            previous?.Dispose();
         }        
 #if DEBUG
         catch (Exception ex)

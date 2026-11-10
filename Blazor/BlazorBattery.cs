@@ -1,4 +1,4 @@
-
+﻿
 
 using Microsoft.JSInterop;
 using Microsoft.Maui.Devices;
@@ -29,7 +29,13 @@ internal sealed class BlazorBattery : IBattery, IAsyncDisposable
             var snapshot = await BlazorEssentials.Module.InvokeAsync<Snapshot?>("batGetSnapshot");
             if (snapshot is not null)
                 Apply(snapshot);
-            _ref?.Dispose();
+            // JS subscriptions are keyed by reference: remove the previous one before disposing it.
+            if (_ref is { } previous)
+            {
+                _ref = null;
+                await BlazorEssentials.Module.InvokeVoidAsync("batUnsubscribe", previous);
+                previous.Dispose();
+            }
             _ref = DotNetObjectReference.Create(this);
             await BlazorEssentials.Module.InvokeVoidAsync("batSubscribe", _ref);
         }        

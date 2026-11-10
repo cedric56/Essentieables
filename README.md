@@ -136,17 +136,64 @@ The Blazor sources are compiled into projects using the Web or Blazor WebAssembl
 `BlazorEssentials.js` is copied to the project's `wwwroot/` folder on build (the folder must exist).
 A Razor class library is not detected: set `<EssentieablesHost>Blazor</EssentieablesHost>` there.
 
+**Blazor WebAssembly** (one user per process, the services are singletons):
+
 ```csharp
 using Essentieables;
 
 builder.Services.UseBlazorEssentieables();
 
-var app = builder.Build();
-await BlazorEssentials.InitializeAsync(app.Services);   // imports ./BlazorEssentials.js
+var host = builder.Build();
+await BlazorEssentials.InitializeAsync(host.Services);   // imports ./BlazorEssentials.js
+await host.RunAsync();
 ```
 
+**Blazor Server** (projects using the Web SDK are compiled with `ESSENTIEABLES_BLAZOR_SERVER`): every
+circuit has its own services, JS module and directories, and nothing is shared between users.
+
+```csharp
+builder.Services.AddRazorComponents().AddInteractiveServerComponents();
+builder.Services.UseBlazorEssentieables();   // scoped services + a CircuitHandler
+```
+
+```razor
+@* In an interactive root component (Routes.razor, MainLayout.razor…) *@
+<BlazorEssentialsInitializer />
+```
+
+`BlazorEssentialsInitializer` calls `BlazorEssentials.InitializeAsync` with the circuit's services after the
+first interactive render (JS interop is not available while prerendering). You can call
+`InitializeAsync(serviceProvider)` yourself instead, from a component, with the injected `IServiceProvider`;
+passing `app.Services` throws, since the services of a circuit only exist in its scope. Repeated calls for
+the same circuit do nothing.
+
+On Blazor Server, the static facades (`Preferences.Default`, `Geolocation.Default`…) forward every call to
+the services of the circuit that is running. They work in components, event handlers, JS callbacks and the
+tasks they start; outside of a circuit (a hosted service, a timer created at startup) they throw
+`InvalidOperationException`: inject the services there instead. A Web SDK project that only hosts a
+WebAssembly client can opt out with `<EssentieablesBlazorServer>false</EssentieablesBlazorServer>`.
+
 `InitializeAsync` must complete before any Essentials API is used; synchronous APIs throw
-`InvalidOperationException` otherwise.
+`InvalidOperationException` otherwise. Failures (permission denied, unsupported API, disconnected circuit)
+are reported as exceptions (`PermissionException`, `FeatureNotSupportedException`…) rather than as empty
+results; a dismissed file picker or camera popup returns `null`.
+
+### Files
+
+- `FileSystem.CacheDirectory` / `AppDataDirectory`: in WebAssembly, the in-memory file system of the tab;
+  on Blazor Server, directories private to the circuit under the server's temp folder, **deleted when the
+  circuit ends**. Neither is durable storage.
+- `FilePicker`: the files are streamed into the cache directory (`BlazorFilePicker.MaxFileSize`, 100 MB by
+  default); browser-supplied names are reduced to a safe file name. `PickOptions.FileTypes` takes an entry for
+  `DevicePlatform.Create("Browser")` with extensions and/or MIME types (`".pdf"`, `"image/*"`); without one,
+  the extensions and MIME types given for the other platforms are used.
+- Captured photos and videos are written to the cache directory too, so `FullPath` is a real file. Read
+  picked or captured files with `OpenReadAsync()` on the result (or `Extensions.OpenReadAsync`), or with
+  `System.IO`; `FileResult.OpenReadAsync()` called through the base type is not implemented by the portable
+  MAUI build.
+- `Launcher` only opens `http`, `https`, `mailto`, `tel` and `sms` URIs, in `CanOpenAsync` and `OpenAsync`
+  alike. HTML, SVG, XML and script files given to `Launcher.OpenAsync(OpenFileRequest)` are downloaded rather
+  than opened, because a `blob:` URL runs with the origin of the app.
 
 ### Web authenticator
 
@@ -159,7 +206,18 @@ app.MapGet(pattern, () => Results.Content(html, "text/html"));
 ```
 
 The popup opens `/auth/start?returnUrl=…&authenticationUrl=…&callbackUrl=…`. **This endpoint is
-yours to provide**: it starts the sign-in flow and finally redirects to `returnUrl`.
+yours to provide**: it starts the sign-in flow and finally redirects to `returnUrl`. Its security is your
+responsibility:
+
+- treat every query parameter as untrusted: only redirect to a `returnUrl` that is a relative path of your
+  own app (the popup page is `/auth/popup-complete`), and only to identity providers and callback URLs from
+  your configuration, never to the values received as-is (open redirect);
+- use the OAuth `state` parameter (or the correlation cookie of the ASP.NET Core authentication handlers)
+  and PKCE, and validate them on the callback;
+- handle errors and cancellation from the provider by still redirecting to `returnUrl`, so the popup closes.
+
+The completion page posts its URL to the opener only on the same origin, and the opener accepts only
+messages from that origin and from the popup it opened.
 
 ---
 
@@ -168,7 +226,7 @@ yours to provide**: it starts the sign-in flow and finally redirects to `returnU
 The platform implementations already exist in a MAUI app. To expose them through dependency injection:
 
 ```csharp
-builder.Services.RegisterAvaeEssentials();
+builder.Services.RegisterEssentieables();
 ```
 
 ---
@@ -206,7 +264,11 @@ maui-labs services. "Stub" means `IsSupported` is `false` or the call throws `Fe
 What the JS implementations can do depends on the browser (sensors, vibration, contacts, torch…).
 
 1. On `net10.0-windows…` the MAUI implementation is used instead, and it needs a map service token.
-2. AES-GCM in `localStorage` with a non-extractable key stored in IndexedDB: any script on the same origin can decrypt it.
+2. AES-GCM in `localStorage` with a non-extractable key stored in IndexedDB. This protects the values at
+   rest only: any script running on the same origin (an XSS, a compromised dependency) can use the key to
+   decrypt them, so it is not equivalent to a platform keychain. Clearing site data deletes the key: the
+   values then read as `null`. Read/write failures throw; `Remove`/`RemoveAll` are queued (their failures
+   are reported by `BlazorSecureStorage.FlushAsync()`).
 
 ---
 
@@ -228,16 +290,21 @@ await Share.Default.RequestAsync("Title", files);                  // share File
 
 ## Known limitations
 
-- **Blazor Server:** the JS module and the services are process-wide singletons. With several
-  circuits, every user shares the module of the last circuit that called `InitializeAsync`
-  (preferences, clipboard, geolocation of another browser). Only use Blazor Server with a single user
-  until per-circuit services are implemented.
+- **Blazor Preferences:** writes are persisted to `localStorage` in the background; a tab closed right
+  after a `Set` can lose it. `BlazorPreferences.FlushAsync()` waits for the pending writes and reports their
+  failures. As in MAUI, only `string`, `bool`, `int`, `long`, `float`, `double`, `DateTime` and
+  `DateTimeOffset` are supported; other types throw `NotSupportedException`.
+- **Blazor Server static facades** use `DispatchProxy` (runtime code generation), which is fine on the
+  server JIT; they are not compiled into WebAssembly apps.
 - **Linux:** maui-labs' Clipboard and DeviceDisplay use GTK, which is not initialized in an Avalonia
   app: the clipboard does nothing and the display info is a 1920×1080 default. `libgtk-4` is a native
   dependency of that package.
 - **Native AOT on Windows:** the share sheet and camera capture use `[ComImport]` interop, which Native AOT does not support.
 - **Geocoding** calls the public Nominatim instance by default: respect its
-  [usage policy](https://operations.osmfoundation.org/policies/nominatim/) (about one request per second).
+  [usage policy](https://operations.osmfoundation.org/policies/nominatim/). Requests to it are spaced by
+  `NominatimGeocoding.MinimumInterval` (one second, process-wide), time out after
+  `NominatimGeocoding.Timeout` and 429/503 answers are retried after their `Retry-After` delay. Browsers send
+  their own User-Agent: in a WebAssembly app, use your own instance or a server-side proxy.
 
 ---
 
