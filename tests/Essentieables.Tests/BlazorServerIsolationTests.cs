@@ -186,6 +186,41 @@ public class BlazorServerIsolationTests
     }
 
     [Fact]
+    public async Task A_circuit_that_was_initialized_is_never_reached_from_outside_of_it()
+    {
+        // The leak of SEC-01: a process-wide "last initialized" session that code outside of a circuit (a timer, a hosted service, a
+        // background task that lost the flow) would fall back to. After a real initialization, outside a circuit must still throw.
+        var js = Substitute.For<IJSRuntime>();
+        var module = Substitute.For<IJSObjectReference>();
+        js.InvokeAsync<IJSObjectReference>("import", Arg.Any<object?[]?>())
+          .Returns(new ValueTask<IJSObjectReference>(module));
+        var services = new ServiceCollection();
+        services.AddScoped(_ => js);
+        services.UseBlazorEssentieables();
+        await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+        await using var alice = provider.CreateAsyncScope();
+
+        var previous = BlazorEssentials.CurrentSession;
+        try
+        {
+            await BlazorEssentials.InitializeAsync(alice.ServiceProvider);
+            await Task.Run(() =>
+            {
+                BlazorEssentials.CurrentSession = null;
+                Assert.Null(BlazorEssentials.CurrentSession);
+                Assert.False(BlazorEssentials.IsInitialized);
+                Assert.Throws<InvalidOperationException>(() => Preferences.Default.ContainsKey("user"));
+                Assert.Throws<InvalidOperationException>(() => FileSystem.Current.CacheDirectory);
+                Assert.Throws<InvalidOperationException>(() => BlazorEssentials.Module);
+            });
+        }
+        finally
+        {
+            BlazorEssentials.CurrentSession = previous;
+        }
+    }
+
+    [Fact]
     public async Task InitializeAsync_imports_the_module_once_per_session()
     {
         var js = Substitute.For<IJSRuntime>();
