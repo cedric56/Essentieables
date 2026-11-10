@@ -36,18 +36,37 @@
       <_EssentieablesAvalonia Condition="'$(EssentieablesHost)' == '' and '@(ReferencePath->AnyHaveMetadataValue('Filename', 'Avalonia.Base'))' == 'true'">true</_EssentieablesAvalonia>
       <_EssentieablesFlavorExcluded Condition="'$(_EssentieablesIsBrowser)' == 'true'">Default</_EssentieablesFlavorExcluded>
       <_EssentieablesFlavorExcluded Condition="'$(_EssentieablesIsBrowser)' != 'true'">Browser</_EssentieablesFlavorExcluded>
+      <_EssentieablesTargetPlatform>$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)'))</_EssentieablesTargetPlatform>
     </PropertyGroup>
 
     <ItemGroup Condition="'$(_EssentieablesAvalonia)' == 'true'">
+
+      <!-- Required on all Avalonia targets -->
       <_EssentieablesRequiredPackage Include="Avalonia.Controls.WebView" />
-      <!-- net10.0-windows* gets WinRT from Microsoft.Windows.SDK.NET; the contract would duplicate it (CS0433). -->
-      <_EssentieablesRequiredPackage Include="WindowsContracts.Net.Foundation.UniversalApiContract"
-                                     Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) != 'windows'" />
-      <_EssentieablesRequiredPackage Include="Microsoft.Maui.Platforms.Linux.Gtk4.Essentials" />
-      <_EssentieablesRequiredPackage Include="Microsoft.Maui.Platforms.MacOS.Essentials"
-                                     Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'macos'" />
+
+      <!-- Windows contract: except Windows and Browser -->
+      <_EssentieablesRequiredPackage
+          Include="WindowsContracts.Net.Foundation.UniversalApiContract"
+          Condition="'$(_EssentieablesTargetPlatform)' != 'windows'
+             AND '$(_EssentieablesTargetPlatform)' != 'browser'" />
+
+      <!-- GTK4 Essentials: default desktop target only -->
+      <_EssentieablesRequiredPackage
+          Include="Microsoft.Maui.Platforms.Linux.Gtk4.Essentials"
+          Condition="'$(_EssentieablesTargetPlatform)' == ''
+             OR '$(_EssentieablesTargetPlatform)' == 'linux'" />
+
+      <!-- macOS Essentials -->
+      <_EssentieablesRequiredPackage
+          Include="Microsoft.Maui.Platforms.MacOS.Essentials"
+          Condition="'$(_EssentieablesTargetPlatform)' == 'macos'" />
+
       <_EssentieablesResolvedPackage Include="@(ReferencePath->'%(NuGetPackageId)')" />
-      <_EssentieablesMissingPackage Include="@(_EssentieablesRequiredPackage)" Exclude="@(_EssentieablesResolvedPackage)" />
+
+      <_EssentieablesMissingPackage
+          Include="@(_EssentieablesRequiredPackage)"
+          Exclude="@(_EssentieablesResolvedPackage)" />
+
     </ItemGroup>
 
     <Error Condition="'@(_EssentieablesMissingPackage)' != ''"

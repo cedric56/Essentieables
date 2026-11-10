@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 Cedric Boutin. Licensed under the MIT License. See LICENSE.txt in the project root.
+﻿
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -144,7 +144,7 @@ public static class Extensions
         EssentialsAccessors.SetTextToSpeech(null, textToSpeech);
         EssentialsAccessors.SetVibration(null, vibration);
         EssentialsAccessors.SetVersionTracking(null, versionTracking?.Invoke());
-        services.RegisterAvaeEssentials(lifetime);
+        services.RegisterEssentieables(lifetime);
     }
 
     /// <summary>
@@ -153,7 +153,7 @@ public static class Extensions
     /// </summary>
     /// <param name="services">The service collection to configure.</param>
     /// <param name="lifetime">The service lifetime used when registering these implementations. Defaults to <see cref="ServiceLifetime.Singleton"/>.</param>
-    public static void RegisterAvaeEssentials(this IServiceCollection services, ServiceLifetime lifetime = ServiceLifetime.Singleton)
+    public static void RegisterEssentieables(this IServiceCollection services, ServiceLifetime lifetime = ServiceLifetime.Singleton)
     {
         services.TryAdd(ServiceDescriptor.Describe(typeof(IAccelerometer), _ => Accelerometer.Default, lifetime));
         services.TryAdd(ServiceDescriptor.Describe(typeof(IAppActions), _ => AppActions.Current, lifetime));

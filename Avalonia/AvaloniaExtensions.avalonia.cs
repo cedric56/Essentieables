@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 Cedric Boutin. Licensed under the MIT License. See LICENSE.txt in the project root.
+﻿
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -59,10 +59,6 @@ internal static class AvaloniaExtensions
     /// </param>
     public static void UseEssentieables(this IServiceCollection services)
     {
-        // Initialize the dispatcher used by Essentieables to marshal
-        // operations onto the current Avalonia UI thread.
-        AvaeDispatcher.Initialize(Dispatcher.CurrentDispatcher);
-
         // Create shared Avalonia-specific dependencies used by multiple services.
         // These instances are passed to the platform implementations below.
         var platformProvider = new AvaeTopLevelStateManager();
@@ -298,14 +294,7 @@ internal static class AvaloniaExtensions
                 () => null!);
         }
 
-        // Expose the Avae dispatcher through MAUI's dispatcher abstraction.
-        // TryAdd avoids replacing a dispatcher registered by the application.
-        services.TryAdd(ServiceDescriptor.Describe(
-            typeof(IDispatcher),
-            _ => AvaeDispatcher.Default,
-            ServiceLifetime.Singleton));
-
         // Register Avae-specific services and any additional Essentials defaults.
-        services.RegisterAvaeEssentials();
+        services.RegisterEssentieables();
     }
 }

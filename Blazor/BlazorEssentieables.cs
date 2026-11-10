@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 Cedric Boutin. Licensed under the MIT License. See LICENSE.txt in the project root.
+﻿
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.JSInterop;
@@ -59,9 +59,9 @@ internal static class BlazorEssentials
             new BlazorVibration(),
             new BlazorWebAuthenticator(),
             () => new BlazorVersionTracking(preferences, appInfo),
-            ServiceLifetime.Singleton);
+            ServiceLifetime.Scoped);
 
-        services.RegisterAvaeEssentials();
+        services.RegisterEssentieables();
     }
 
     public static (string pattern, string html) UseWebAuthenticator()
