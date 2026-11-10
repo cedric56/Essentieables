@@ -170,11 +170,15 @@ the same circuit do nothing.
 On Blazor Server, the static facades (`Preferences.Default`, `Geolocation.Default`…) forward every call to
 the services of the circuit that is running. They work in components, event handlers, JS callbacks and the
 tasks they start; outside of a circuit (a hosted service, a timer created at startup) they throw
-`InvalidOperationException`: inject the services there instead. A Web SDK project that only hosts a
+`InvalidOperationException`: inject the services there instead. Prerendering is not a circuit either: use
+the facades from `OnAfterRenderAsync` or event handlers, not while the page is prerendered. A Web SDK project that only hosts a
 WebAssembly client can opt out with `<EssentieablesBlazorServer>false</EssentieablesBlazorServer>`.
 
-`InitializeAsync` must complete before any Essentials API is used; synchronous APIs throw
-`InvalidOperationException` otherwise. Failures (permission denied, unsupported API, disconnected circuit)
+`InitializeAsync` must complete before any Essentials API is used. Before it, the asynchronous APIs and the
+synchronous commands (`Vibration.Vibrate`, `PhoneDialer.Open`, `SemanticScreenReader.Announce`,
+`HapticFeedback.Perform`) throw `InvalidOperationException`, while the synchronous state (`Preferences.Get`,
+`Connectivity.NetworkAccess`, `Clipboard.HasText`…) reads its default value (`BlazorPreferences.IsLoaded`
+tells whether the stored preferences are loaded). Failures (permission denied, unsupported API, disconnected circuit)
 are reported as exceptions (`PermissionException`, `FeatureNotSupportedException`…) rather than as empty
 results; a dismissed file picker or camera popup returns `null`.
 
@@ -294,6 +298,9 @@ await Share.Default.RequestAsync("Title", files);                  // share File
   after a `Set` can lose it. `BlazorPreferences.FlushAsync()` waits for the pending writes and reports their
   failures. As in MAUI, only `string`, `bool`, `int`, `long`, `float`, `double`, `DateTime` and
   `DateTimeOffset` are supported; other types throw `NotSupportedException`.
+- **Blazor file dialog:** a dialog closed without a choice is detected with the `cancel` event of the
+  input (Chrome 113+, Firefox 91+, Safari 16.4+). On older browsers, `PickAsync` does not return until a file
+  is chosen.
 - **Blazor Server static facades** use `DispatchProxy` (runtime code generation), which is fine on the
   server JIT; they are not compiled into WebAssembly apps.
 - **Linux:** maui-labs' Clipboard and DeviceDisplay use GTK, which is not initialized in an Avalonia
@@ -328,7 +335,7 @@ Building every target framework needs the `android`, `ios` and `macos` workloads
 
 | Project | What it checks |
 |---------|----------------|
-| `tests/Essentieables.Tests` | The MAUI facade accessors still match MAUI's internals; macOS type names; Nominatim parsing and culture-invariant URLs; registration; resolvers. It also compiles the Blazor sources. |
+| `tests/Essentieables.Tests` | The MAUI facade accessors still match MAUI's internals; macOS type names; Nominatim parsing, culture-invariant URLs and retries; registration; resolvers. It compiles the Blazor sources as a Blazor Server host and checks the isolation between circuits (services, facades, directories, a circuit never reached from outside of it), the initialization, Preferences and SecureStorage errors, file names and filters, and the schemes the Launcher refuses. |
 | `tests/Consumers/LibraryConsumer` | The injected Avalonia sources compile for each consumer target framework |
 | `tests/Consumers/AvaloniaSmoke` | `UseEssentieables()` runs in a headless Avalonia app and the core services work |
 | `tests/Consumers/BlazorWasmConsumer`, `BlazorServerConsumer` | The Blazor sources compile in both hosts and `BlazorEssentials.js` is copied |
