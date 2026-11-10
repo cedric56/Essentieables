@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The static MAUI Essentials facades, without any host: the accessors of their internal setters and the forwarding facades of
+       multi-user servers. No build/*.targets, no injected sources: Essentieables and Routeables.SignalR both depend on it. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <IsAotCompatible>true</IsAotCompatible>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <RootNamespace>Essentieables</RootNamespace>
+    <Version>1.0.0-preview.1</Version>
+    <PackageId>Essentieables.Facades</PackageId>
+    <Authors>Cedric Boutin</Authors>
+    <Copyright>Copyright (c) 2026 Cedric Boutin</Copyright>
+    <Description>Accessors and per-session forwarding facades for the static Microsoft.Maui.Essentials facades.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\THIRD-PARTY-NOTICES.txt" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Maui.Essentials" Version="10.0.120" />
+  </ItemGroup>
+
+</Project>

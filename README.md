@@ -33,9 +33,11 @@ registers the same instances in `IServiceCollection`, so `Geolocation.Default` a
 
 ## How it works
 
-The package contains a small compiled library (registration, MAUI facade accessors, shared helpers
-such as the Nominatim geocoder) plus **source files compiled into the project that references it**.
-`build/Essentieables.targets` detects the host, so there is nothing to declare:
+The package contains a small compiled library (registration, shared helpers such as the Nominatim
+geocoder) plus **source files compiled into the project that references it**. It depends on
+[Essentieables.Facades](src/Essentieables.Facades/README.md), which holds the MAUI facade accessors and the
+per-session forwarding facades and injects nothing into your build.
+`src/Essentieables/build/Essentieables.targets` detects the host, so there is nothing to declare:
 
 | Host | Detected when the project… | Sources compiled into it |
 |------|----------------------------|--------------------------|
@@ -170,7 +172,9 @@ the same circuit do nothing.
 On Blazor Server, the static facades (`Preferences.Default`, `Geolocation.Default`…) forward every call to
 the services of the circuit that is running. They work in components, event handlers, JS callbacks and the
 tasks they start; outside of a circuit (a hosted service, a timer created at startup) they throw
-`InvalidOperationException`: inject the services there instead. Prerendering is not a circuit either: use
+`InvalidOperationException`: inject the services there instead. The forwarding comes from
+[Essentieables.Facades](src/Essentieables.Facades/README.md), so another multi-user host of the same process
+(a Routeables.SignalR server, say) can share the facades: each call goes to the session that is running, whichever host owns it. Prerendering is not a circuit either: use
 the facades from `OnAfterRenderAsync` or event handlers, not while the page is prerendered. A Web SDK project that only hosts a
 WebAssembly client can opt out with `<EssentieablesBlazorServer>false</EssentieablesBlazorServer>`.
 
@@ -324,7 +328,7 @@ dotnet test tests/Essentieables.Tests -p:EssentieablesTargetFrameworks=net10.0
 # Package for a subset of target frameworks.
 # Lists go in environment variables: `-p:` splits its value on ';' and ',' (MSB1006).
 export EssentieablesTargetFrameworks="net10.0;net10.0-android"   # PowerShell: $env:EssentieablesTargetFrameworks = "..."
-dotnet pack -c Release -o artifacts/packages -p:Version=1.0.0-local
+dotnet pack -c Release -o artifacts/packages -p:Version=1.0.0-local   # Essentieables and Essentieables.Facades
 
 # Consumer checks against that package (see tests/Consumers)
 dotnet run --project tests/Consumers/AvaloniaSmoke
@@ -333,9 +337,16 @@ ConsumerTargetFrameworks="net10.0;net10.0-android" dotnet build tests/Consumers/
 
 Building every target framework needs the `android`, `ios` and `macos` workloads (`ios` and `macos` on a Mac).
 
+The repository holds two packages, each in its own project:
+
+| Project | Package |
+|---------|---------|
+| [`src/Essentieables`](src/Essentieables) | `Essentieables`: registration, helpers, and the host sources injected into the app (`Avalonia/`, `Blazor/`, `build/Essentieables.targets`) |
+| [`src/Essentieables.Facades`](src/Essentieables.Facades) | `Essentieables.Facades`: the MAUI facade accessors and the per-session forwarding facades; no injected sources. `Essentieables` depends on it |
+
 | Project | What it checks |
 |---------|----------------|
-| `tests/Essentieables.Tests` | The MAUI facade accessors still match MAUI's internals; macOS type names; Nominatim parsing, culture-invariant URLs and retries; registration; resolvers. It compiles the Blazor sources as a Blazor Server host and checks the isolation between circuits (services, facades, directories, a circuit never reached from outside of it), the initialization, Preferences and SecureStorage errors, file names and filters, and the schemes the Launcher refuses. |
+| `tests/Essentieables.Tests` | The MAUI facade accessors still match MAUI's internals; macOS type names; Nominatim parsing, culture-invariant URLs and retries; registration; resolvers; the forwarding facades shared by multi-user hosts (resolver chain, extended facades kept, restored after a replacement). It compiles the Blazor sources as a Blazor Server host and checks the isolation between circuits (services, facades, directories, a circuit never reached from outside of it), the initialization, Preferences and SecureStorage errors, file names and filters, and the schemes the Launcher refuses. |
 | `tests/Consumers/LibraryConsumer` | The injected Avalonia sources compile for each consumer target framework |
 | `tests/Consumers/AvaloniaSmoke` | `UseEssentieables()` runs in a headless Avalonia app and the core services work |
 | `tests/Consumers/BlazorWasmConsumer`, `BlazorServerConsumer` | The Blazor sources compile in both hosts and `BlazorEssentials.js` is copied |

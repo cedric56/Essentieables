@@ -75,9 +75,17 @@ jobs:
           --logger "trx;LogFileName=results.trx"
           --results-directory artifacts/test-results
 
+      - name: Pack Essentieables.Facades
+        # Essentieables depends on it (same version): the consumers restore both from artifacts/packages.
+        run: >
+          dotnet pack src/Essentieables.Facades/Essentieables.Facades.csproj
+          -c Release
+          -o artifacts/packages
+          -p:Version=${{ env.EssentieablesVersion }}
+
       - name: Pack
         run: >
-          dotnet pack Essentieables.csproj
+          dotnet pack src/Essentieables/Essentieables.csproj
           -c Release
           -o artifacts/packages
           -p:Version=${{ env.EssentieablesVersion }}

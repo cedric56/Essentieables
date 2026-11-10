@@ -160,42 +160,22 @@ internal static class BlazorEssentials
 
         // The static facades are process-wide: they must never hold a user's instance.
         // They forward to the services of the current circuit instead.
-        EssentialsAccessors.SetAccelerometer(null, BlazorCircuitProxy<IAccelerometer, IAccelerometer>.Create());
-        EssentialsAccessors.SetAppActions(null, BlazorCircuitProxy<IAppActions, IAppActions>.Create());
-        EssentialsAccessors.SetAppInfo(null, BlazorCircuitProxy<IAppInfo, IAppInfo>.Create());
-        EssentialsAccessors.SetBarometer(null, BlazorCircuitProxy<IBarometer, IBarometer>.Create());
-        EssentialsAccessors.SetBattery(null, BlazorCircuitProxy<IBattery, IBattery>.Create());
-        EssentialsAccessors.SetBrowser(null, BlazorCircuitProxy<IBrowser, IBrowser>.Create());
-        EssentialsAccessors.SetClipboard(null, BlazorCircuitProxy<IClipboard, IClipboard>.Create());
-        EssentialsAccessors.SetCompass(null, BlazorCircuitProxy<ICompass, ICompass>.Create());
-        EssentialsAccessors.SetConnectivity(null, BlazorCircuitProxy<IConnectivity, IConnectivity>.Create());
-        EssentialsAccessors.SetContacts(null, BlazorCircuitProxy<IContacts, IContacts>.Create());
-        EssentialsAccessors.SetDeviceDisplay(null, BlazorCircuitProxy<IDeviceDisplay, IDeviceDisplay>.Create());
-        EssentialsAccessors.SetDeviceInfo(null, BlazorCircuitProxy<IDeviceInfo, IDeviceInfo>.Create());
-        EssentialsAccessors.SetEmail(null, BlazorCircuitProxy<IEmail, IEmail>.Create());
-        EssentialsAccessors.SetFilePicker(null, BlazorCircuitProxy<IFilePicker, IFilePicker>.Create());
-        EssentialsAccessors.SetFileSystem(null, BlazorCircuitProxy<IFileSystem, IFileSystem>.Create());
-        EssentialsAccessors.SetFlashlight(null, BlazorCircuitProxy<IFlashlight, IFlashlight>.Create());
-        EssentialsAccessors.SetGeocoding(null, BlazorCircuitProxy<IGeocoding, IGeocoding>.Create());
-        EssentialsAccessors.SetGeolocation(null, BlazorCircuitProxy<IGeolocation, IGeolocation>.Create());
-        EssentialsAccessors.SetGyroscope(null, BlazorCircuitProxy<IGyroscope, IGyroscope>.Create());
-        EssentialsAccessors.SetHapticFeedback(null, BlazorCircuitProxy<IHapticFeedback, IHapticFeedback>.Create());
-        EssentialsAccessors.SetLauncher(null, BlazorCircuitProxy<ILauncher, ILauncher>.Create());
-        EssentialsAccessors.SetMagnetometer(null, BlazorCircuitProxy<IMagnetometer, IMagnetometer>.Create());
-        EssentialsAccessors.SetMap(null, BlazorCircuitProxy<IMap, IMap>.Create());
-        EssentialsAccessors.SetMediaPicker(null, BlazorCircuitProxy<IAvaeMediaPicker, IMediaPicker>.Create());
-        EssentialsAccessors.SetOrientationSensor(null, BlazorCircuitProxy<IOrientationSensor, IOrientationSensor>.Create());
-        EssentialsAccessors.SetPhoneDialer(null, BlazorCircuitProxy<IPhoneDialer, IPhoneDialer>.Create());
-        EssentialsAccessors.SetPreferences(null, BlazorCircuitProxy<IPreferences, IPreferences>.Create());
-        EssentialsAccessors.SetScreenshot(null, BlazorCircuitProxy<IScreenshot, IScreenshot>.Create());
-        EssentialsAccessors.SetSecureStorage(null, BlazorCircuitProxy<ISecureStorage, ISecureStorage>.Create());
-        EssentialsAccessors.SetSemanticScreenReader(null, BlazorCircuitProxy<ISemanticScreenReader, ISemanticScreenReader>.Create());
-        EssentialsAccessors.SetShare(null, BlazorCircuitProxy<IAvaeShare, IShare>.Create());
-        EssentialsAccessors.SetSms(null, BlazorCircuitProxy<ISms, ISms>.Create());
-        EssentialsAccessors.SetTextToSpeech(null, BlazorCircuitProxy<ITextToSpeech, ITextToSpeech>.Create());
-        EssentialsAccessors.SetVibration(null, BlazorCircuitProxy<IVibration, IVibration>.Create());
-        EssentialsAccessors.SetWebAuthenticator(null, BlazorCircuitProxy<IWebAuthenticator, IWebAuthenticator>.Create());
-        EssentialsAccessors.SetVersionTracking(null, BlazorCircuitProxy<IVersionTracking, IVersionTracking>.Create());
+        // Other hosts of the process (Routeables.SignalR…) register their own resolver next to this one.
+        EssentialsFacades.AddSessionResolver("Blazor Server", () => CurrentSession?.Services);
+        InstallFacades();
+    }
+
+    [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("AOT", "IL3050",
+        Justification = "Blazor Server runs on the JIT; this path is not compiled into WebAssembly apps.")]
+    [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification = "Blazor Server apps are not trimmed.")]
+    static void InstallFacades()
+    {
+        // Extended first or last does not matter: a plain facade never replaces an extended one. The extended interfaces keep the
+        // Essentieables helpers able to recognize the Blazor implementations behind Share.Default and MediaPicker.Default.
+        EssentialsFacades.Install<IAvaeShare, IShare>();
+        EssentialsFacades.Install<IAvaeMediaPicker, IMediaPicker>();
+        EssentialsFacades.InstallForwarding();
     }
 #endif
 
@@ -452,40 +432,5 @@ internal sealed class BlazorEssentialsCircuitHandler(BlazorEssentialsSession ses
     public override Task OnCircuitClosedAsync(
         Microsoft.AspNetCore.Components.Server.Circuits.Circuit circuit, CancellationToken cancellationToken)
         => session.DisposeAsync().AsTask();
-}
-
-/// <summary>
-/// Installed in a static MAUI facade on Blazor Server: forwards every member (methods, properties,
-/// events) to the <typeparamref name="TService"/> registered in the current circuit.
-/// <typeparamref name="TFacade"/> may extend it (IAvaeShare, IAvaeMediaPicker) so that the
-/// Essentieables helpers still recognize the Blazor implementations behind the facade.
-/// </summary>
-internal class BlazorCircuitProxy<TFacade, TService> : System.Reflection.DispatchProxy
-    where TFacade : class, TService
-    where TService : class
-{
-    [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("AOT", "IL3050",
-        Justification = "Blazor Server runs on the JIT; this path is not compiled into WebAssembly apps.")]
-    [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026",
-        Justification = "Blazor Server apps are not trimmed.")]
-    public static TFacade Create() => Create<TFacade, BlazorCircuitProxy<TFacade, TService>>();
-
-    protected override object? Invoke(System.Reflection.MethodInfo? targetMethod, object?[]? args)
-    {
-        ArgumentNullException.ThrowIfNull(targetMethod);
-        var target = BlazorEssentials.GetSessionService<TService>();
-        if (!targetMethod.DeclaringType!.IsInstanceOfType(target))
-            throw new NotSupportedException(
-                $"{target.GetType().Name} does not implement {targetMethod.DeclaringType.Name}.{targetMethod.Name}.");
-        try
-        {
-            return targetMethod.Invoke(target, args);
-        }
-        catch (System.Reflection.TargetInvocationException ex) when (ex.InnerException is not null)
-        {
-            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
-            throw;
-        }
-    }
 }
 #endif

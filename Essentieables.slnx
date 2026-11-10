@@ -1,5 +1,8 @@
-<Solution>
-  <Project Path="Essentieables.csproj" />
+﻿<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Essentieables/Essentieables.csproj" />
+    <Project Path="src/Essentieables.Facades/Essentieables.Facades.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Essentieables.Tests/Essentieables.Tests.csproj" />
   </Folder>
