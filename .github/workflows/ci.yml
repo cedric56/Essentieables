@@ -31,7 +31,8 @@ jobs:
             os: ubuntu-latest
             workloads: android
             lib-tfms: net10.0;net10.0-browser;net10.0-android
-            consumer-tfms: net10.0;net10.0-android
+            # net10.0-browser: the Avalonia.Browser sources (the Blazor implementations and AvaloniaBrowserJSRuntime)
+            consumer-tfms: net10.0;net10.0-android;net10.0-browser
             blazor: true
           # Windows desktop (WinRT ports) + windows TFM (MAUI Essentials WinUI build)
           - name: Windows

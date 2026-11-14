@@ -1,9 +1,9 @@
 ﻿
 
-// Browser Essentials interop module.
-// Loaded by BrowserEssentials.InitializeAsync() via JSHost.ImportAsync and
-// bound from C# with [JSImport]. All functions are plain ES module exports
-// with no dependencies.
+// Browser Essentials interop module, shared by Blazor (WebAssembly and Server) and Avalonia.Browser.
+// Imported by BlazorEssentials.InitializeAsync() through IJSRuntime ("import"): the Blazor runtime in a Blazor app,
+// AvaloniaBrowserJSRuntime (EssentieablesInterop.js) in an Avalonia.Browser app. All functions are plain ES module
+// exports with no dependencies.
 
 // ---------- Media Picker -----------
 
@@ -853,18 +853,173 @@ export function clipboardReadText() {
 
 // ---------- Device info ----------
 
-export function getDeviceInfo() {
+export async function getDeviceInfo() {
 	const nav = globalThis.navigator;
 	const uaData = nav.userAgentData;
-	return {
-		userAgent: nav.userAgent || '',
+	const ua = nav.userAgent || '';
+	const info = {
+		userAgent: ua,
 		vendor: nav.vendor || '',
 		language: nav.language || '',
 		platform: (uaData && uaData.platform) || nav.platform || '',
-		mobile: uaData ? !!uaData.mobile : /Mobi|Android|iPhone|iPad/i.test(nav.userAgent || ''),
-		brands: (uaData && uaData.brands) ? uaData.brands.map(b => ({ brand: b.brand, version: b.version })) : []
+		mobile: uaData ? !!uaData.mobile : /Mobi|Android|iPhone|iPad/i.test(ua),
+		brands: (uaData && uaData.brands) ? uaData.brands.map(b => ({ brand: b.brand, version: b.version })) : [],
+		...detectDevice(ua),
+		...getGpu(),
+	};
+
+	// Chromium: the exact OS version, architecture and device model.
+	if (uaData && typeof uaData.getHighEntropyValues === "function") {
+		try {
+			const high = await uaData.getHighEntropyValues(["platformVersion", "architecture", "bitness", "model"]);
+			if (high.model)
+				info.deviceModel = high.model;
+			if (high.architecture)
+				info.architecture = high.architecture + (high.bitness ? "-" + high.bitness : "");
+			if (high.platformVersion) {
+				if (uaData.platform === "Windows") {
+					// platformVersion 13+ is Windows 11 (https://learn.microsoft.com/microsoft-edge/web-platform/how-to-detect-win11).
+					const major = parseInt(high.platformVersion.split('.')[0], 10);
+					info.osVersion = major >= 13 ? "11" : major > 0 ? "10" : info.osVersion;
+				} else {
+					info.osVersion = high.platformVersion;
+				}
+			}
+		} catch {
+			// Denied by the permissions policy: keep the user agent values.
+		}
+	}
+	return info;
+}
+
+/** OS, device type and model from the user agent (the subset of ua-parser-js that Avae.Browser.Essentials used). */
+function detectDevice(ua) {
+	const nav = globalThis.navigator;
+	const isIPadOS = /iPad/.test(ua) || (nav.platform === "MacIntel" && nav.maxTouchPoints > 1);
+	const isIPhone = /iPhone|iPod/.test(ua);
+	const isAndroid = /Android/i.test(ua);
+	const isIPadPro = isIPadOS && isIPadProResolution();
+	const isTablet = isIPadOS || /Tablet|PlayBook|Silk|Kindle/i.test(ua) || (isAndroid && !/Mobile/i.test(ua));
+	const isMobile = !isTablet && (isIPhone || /Mobi|Android|Windows Phone|BlackBerry|Opera Mini/i.test(ua));
+
+	let osName = '', osVersion = '', deviceVendor = '', deviceModel = '';
+	let m;
+	if (isIPhone || isIPadOS) {
+		osName = "iOS";
+		m = ua.match(/OS (\d+[_.]\d+(?:[_.]\d+)?) like Mac OS X/);
+		osVersion = m ? m[1].replace(/_/g, '.') : (ua.match(/Version\/([\d.]+)/)?.[1] ?? '');
+		deviceVendor = "Apple";
+		deviceModel = appleModel(isIPadOS ? "iPad" : "iPhone");
+	} else if (isAndroid) {
+		osName = "Android";
+		osVersion = ua.match(/Android\s([\d.]+)/)?.[1] ?? '';
+		// "Android 14; Pixel 8 Build/UD1A…" or "Android 14; SM-S911B)"
+		m = ua.match(/Android[^;)]*;\s*(?:[a-z]{2}[-_][a-z]{2};\s*)?([^;)]+?)(?:\s+Build\/|\))/i);
+		if (m && m[1] !== 'K' && !/^wv$/i.test(m[1]))
+			deviceModel = m[1].trim();
+		deviceVendor = androidVendor(deviceModel);
+	} else if ((m = ua.match(/Windows NT ([\d.]+)/))) {
+		osName = "Windows";
+		osVersion = { "10.0": "10", "6.3": "8.1", "6.2": "8", "6.1": "7", "6.0": "Vista" }[m[1]] ?? m[1];
+	} else if ((m = ua.match(/Mac OS X ([\d_.]+)/))) {
+		osName = "macOS";
+		osVersion = m[1].replace(/_/g, '.');
+		deviceVendor = "Apple";
+	} else if (/CrOS/.test(ua)) {
+		osName = "ChromeOS";
+		osVersion = ua.match(/CrOS \S+ ([\d.]+)/)?.[1] ?? '';
+	} else if (/Linux/i.test(ua)) {
+		osName = "Linux";
+	}
+
+	return {
+		osName, osVersion, deviceVendor, deviceModel,
+		isTablet, isMobile, isIPad: isIPadOS, isIPadPro, isIPhone, isAndroid,
+		architecture: /arm64|aarch64/i.test(ua) ? "arm64" : /x86_64|x64|Win64|WOW64|amd64/i.test(ua) ? "x64" : '',
 	};
 }
+
+function androidVendor(model) {
+	const vendors = [
+		[/^(SM-|GT-|SCH-|SGH-|Galaxy)/i, "Samsung"], [/^Pixel|^Nexus/i, "Google"], [/^(Redmi|Mi |MI |POCO|M2\d{3}|2\d{3}[A-Z0-9]{3,})/i, "Xiaomi"],
+		[/^(HUAWEI|ELE-|VOG-|ANA-|NOH-)/i, "Huawei"], [/^(CPH|OPPO)/i, "OPPO"], [/^(ONEPLUS|[A-Z]{2}\d{4}$)/i, "OnePlus"],
+		[/^(moto|Moto|XT\d)/, "Motorola"], [/^(LM-|LG)/i, "LG"], [/^(V\d{4}|vivo)/i, "vivo"], [/^(RMX|realme)/i, "realme"],
+		[/^Nokia/i, "Nokia"], [/^(SO-|XQ-|Xperia)/i, "Sony"], [/^(KF|AF)[A-Z]{2,}/, "Amazon"],
+	];
+	for (const [pattern, vendor] of vendors)
+		if (pattern.test(model))
+			return vendor;
+	return '';
+}
+
+function isIPadProResolution() {
+	const ratio = globalThis.devicePixelRatio || 1;
+	const w = Math.round(screen.width * ratio), h = Math.round(screen.height * ratio);
+	const long = Math.max(w, h), short = Math.min(w, h);
+	return (short === 2048 && long === 2732) || (short === 1668 && long === 2388) || (short === 1668 && long === 2224)
+		|| (short === 2064 && long === 2752) || (short === 1668 && long === 2420);
+}
+
+let gpuInfo = null;
+
+/** The GPU renderer and vendor (WEBGL_debug_renderer_info), used to tell Apple devices apart. */
+function getGpu() {
+	if (gpuInfo)
+		return gpuInfo;
+	gpuInfo = { gpuRenderer: '', gpuVendor: '' };
+	try {
+		const gl = document.createElement("canvas").getContext("webgl");
+		const ext = gl && gl.getExtension("WEBGL_debug_renderer_info");
+		if (ext) {
+			gpuInfo.gpuRenderer = gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || '';
+			gpuInfo.gpuVendor = gl.getParameter(ext.UNMASKED_VENDOR_WEBGL) || '';
+		}
+	} catch {
+	}
+	return gpuInfo;
+}
+
+// [GPU, native resolution, models], from Avae.Browser.Essentials. Safari reports "Apple GPU" on recent devices, so only
+// the resolution can narrow the list there.
+const APPLE_DEVICES = [
+	['a7', '640x1136', ['iPhone 5', 'iPhone 5s']],
+	['a7', '1536x2048', ['iPad Air', 'iPad Mini 2', 'iPad Mini 3', 'iPad Pro 9.7']],
+	['a8', '640x1136', ['iPod touch (6th gen)']],
+	['a8', '750x1334', ['iPhone 6']],
+	['a8', '1242x2208', ['iPhone 6 Plus']],
+	['a8', '1536x2048', ['iPad Air 2', 'iPad Mini 4']],
+	['a9', '640x1136', ['iPhone SE']],
+	['a9', '750x1334', ['iPhone 6s']],
+	['a9', '1242x2208', ['iPhone 6s Plus']],
+	['a9x', '1536x2048', ['iPad Pro (1st gen 9.7-inch)']],
+	['a9x', '2048x2732', ['iPad Pro (1st gen 12.9-inch)']],
+	['a10', '750x1334', ['iPhone 7']],
+	['a10', '1242x2208', ['iPhone 7 Plus']],
+	['a10x', '1668x2224', ['iPad Pro (2nd gen 10.5-inch)']],
+	['a10x', '2048x2732', ['iPad Pro (2nd gen 12.9-inch)']],
+	['a11', '750x1334', ['iPhone 8']],
+	['a11', '1242x2208', ['iPhone 8 Plus']],
+	['a11', '1125x2436', ['iPhone X']],
+	['a12', '828x1792', ['iPhone Xr']],
+	['a12', '1125x2436', ['iPhone Xs']],
+	['a12', '1242x2688', ['iPhone Xs Max']],
+	['a12x', '1668x2388', ['iPad Pro (3rd gen 11-inch)']],
+	['a12x', '2048x2732', ['iPad Pro (3rd gen 12.9-inch)']],
+	['a15', '1179x2556', ['iPhone 14 Pro', 'iPhone 15', 'iPhone 15 Pro']],
+	['a15', '1290x2796', ['iPhone 14 Pro Max', 'iPhone 15 Plus', 'iPhone 15 Pro Max']],
+];
+
+function appleModel(family) {
+	const ratio = globalThis.devicePixelRatio || 1;
+	const w = Math.round(screen.width * ratio), h = Math.round(screen.height * ratio);
+	const resolution = Math.min(w, h) + 'x' + Math.max(w, h);
+	const renderer = getGpu().gpuRenderer.toLowerCase();
+	const candidates = APPLE_DEVICES.filter(d => d[1] === resolution && d[2].some(m => m.startsWith(family)));
+	const exact = candidates.find(d => renderer.includes('apple ' + d[0] + ' gpu'));
+	const models = (exact ?? (candidates.length === 1 ? candidates[0] : null))?.[2];
+	return models ? models.join(' / ') : family;
+}
+
 // ---------- Display ----------
 function ddGetInfo() {
 	const o = screen.orientation;
@@ -1522,8 +1677,17 @@ export function connectivityUnsubscribe() {
 	connectivityHandler = null;
 }
 
+function metaContent(name) {
+	return document.querySelector(`meta[name="${name}"]`)?.getAttribute("content") || null;
+}
+
 export function appInfoGet() {
 	return {
+		// <meta> tags of index.html, as read by Avae.Browser.Essentials: they override the defaults when present.
+		metaName: metaContent("name") ?? metaContent("application-name"),
+		metaPackage: metaContent("package"),
+		metaVersion: metaContent("app-version"),
+		metaBuild: metaContent("build-version"),
 		title: document.title,
 		hostname: location.hostname,
 		rtl: document.documentElement.dir === "rtl"
@@ -1667,6 +1831,167 @@ export function authenticate(url) {
 			// Open the authentication URL only after installing listeners.
 			popup.location.href = url;
 		});
+}
+
+/**
+ * Opens the authentication URL itself (no server endpoint: Avalonia.Browser, static hosting) and resolves with the URL the
+ * provider redirects the popup to. The callback URL must be on the origin of the app. Completion is detected by reading
+ * the popup location once it is back on this origin, or from a message of the callback page: the page returned by
+ * BlazorEssentials.UseWebAuthenticator(), or a BroadcastChannel("token") post as with Avae.Browser.Essentials.
+ */
+export function authenticateDirect(url, callbackUrl) {
+	return new Promise((resolve, reject) => {
+		let callback;
+		try {
+			callback = new URL(callbackUrl, location.href);
+		} catch (e) {
+			reject(e);
+			return;
+		}
+		if (callback.origin !== location.origin) {
+			reject(new Error("The callback URL must be on the origin of the app (" + location.origin + ")."));
+			return;
+		}
+
+		const popup = window.open(url, "webAuthenticator", "width=520,height=700");
+		if (!popup) {
+			reject(new Error("The authentication popup was blocked."));
+			return;
+		}
+
+		const isCallback = href => {
+			try {
+				const u = new URL(href);
+				return u.origin === callback.origin && u.pathname === callback.pathname;
+			} catch {
+				return false;
+			}
+		};
+
+		let finished = false;
+		const channel = typeof BroadcastChannel === "function" ? new BroadcastChannel("token") : null;
+
+		const finish = (error, result) => {
+			if (finished) return;
+			finished = true;
+			window.removeEventListener("message", onMessage);
+			clearInterval(poll);
+			clearTimeout(timeout);
+			channel?.close();
+			try { popup.close(); } catch { }
+			if (error) reject(error);
+			else resolve(result);
+		};
+
+		const onMessage = event => {
+			if (event.origin === location.origin && event.source === popup
+				&& event.data?.type === "web-authenticator-complete" && isCallback(event.data.url))
+				finish(null, event.data.url);
+		};
+		window.addEventListener("message", onMessage);
+		if (channel)
+			channel.onmessage = event => {
+				if (typeof event.data === "string" && isCallback(event.data))
+					finish(null, event.data);
+			};
+
+		const poll = setInterval(() => {
+			let href = null;
+			try {
+				href = popup.location.href; // throws while the popup is on the provider (cross-origin)
+			} catch {
+			}
+			if (href && isCallback(href)) {
+				finish(null, href);
+				return;
+			}
+			if (popup.closed)
+				finish(new Error("Authentication window closed."));
+		}, 250);
+
+		const timeout = setTimeout(() => finish(new Error("Authentication timed out.")), 300000);
+	});
+}
+
+// ---------- Persistent file system (IndexedDB, WebAssembly only) ----------
+
+let fsPaths = [];
+let fsQueue = Promise.resolve(true);
+let fsFlushTimer = 0;
+let fsListening = false;
+
+/** Emscripten's FS of the .NET runtime of this page; null on Blazor Server or when it is not exported. */
+function getFS() {
+	try {
+		return globalThis.getDotnetRuntime?.(0)?.Module?.FS ?? null;
+	} catch {
+		return null;
+	}
+}
+
+function fsSync(populate) {
+	const FS = getFS();
+	if (!FS || fsPaths.length === 0)
+		return Promise.resolve(false);
+	// One syncfs at a time: Emscripten warns, and may lose writes, when they overlap.
+	fsQueue = fsQueue.then(() => new Promise(resolve => {
+		try {
+			FS.syncfs(populate, err => resolve(!err));
+		} catch {
+			resolve(false);
+		}
+	}));
+	return fsQueue;
+}
+
+/**
+ * Mounts the given directories on IndexedDB (IDBFS) and loads their content. Returns false when the app was not linked
+ * with IDBFS (<EmccExtraLDFlags>-lidbfs.js</EmccExtraLDFlags>): the directories then stay in memory.
+ */
+export async function fsMountPersistent(paths) {
+	const FS = getFS();
+	if (!FS?.filesystems?.IDBFS) {
+		console.debug("Essentieables: FileSystem.AppDataDirectory is not persistent. Add <EmccExtraLDFlags>-lidbfs.js</EmccExtraLDFlags> to the app project to keep it in IndexedDB.");
+		return false;
+	}
+	for (const path of paths) {
+		if (fsPaths.includes(path))
+			continue;
+		try { FS.mkdir(path); } catch { /* exists */ }
+		try {
+			FS.mount(FS.filesystems.IDBFS, { autoPersist: true }, path);
+			fsPaths.push(path);
+		} catch (e) {
+			console.warn("Essentieables: cannot mount " + path + " on IndexedDB.", e);
+		}
+	}
+	if (fsPaths.length === 0)
+		return false;
+	await fsSync(true);
+	if (!fsListening) {
+		fsListening = true;
+		// Last chance to save when the tab is hidden or closed.
+		document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") fsSync(false); });
+		window.addEventListener("pagehide", () => fsSync(false));
+	}
+	return true;
+}
+
+export function fsPersist() {
+	return fsSync(false);
+}
+
+export function fsStartPeriodicFlush(intervalMs) {
+	if (fsFlushTimer)
+		return;
+	fsFlushTimer = setInterval(() => fsSync(false), intervalMs > 0 ? intervalMs : 5000);
+}
+
+export function fsStopPeriodicFlush() {
+	if (fsFlushTimer) {
+		clearInterval(fsFlushTimer);
+		fsFlushTimer = 0;
+	}
 }
 
 // ---------- Torch ----------

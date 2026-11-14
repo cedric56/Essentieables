@@ -28,7 +28,7 @@ internal sealed class BlazorPreferences : IPreferences
     private long _nextOperationId;
 
 
-    private const string KeyPrefix = "maui:prefs:";
+    internal const string KeyPrefix = "maui:prefs:";
 
     private readonly ConcurrentDictionary<string, string> _cache = new();
 
@@ -41,6 +41,50 @@ internal sealed class BlazorPreferences : IPreferences
     /// <summary>True once the values stored in localStorage have been loaded.</summary>
     public bool IsLoaded => _loaded;
 
+    /// <summary>
+    /// Reads the localStorage entries starting with a prefix synchronously, or returns null when it cannot. Given in
+    /// Avalonia.Browser apps, where [JSImport] is synchronous: the values are then loaded on first use, before
+    /// <see cref="InitializeAsync"/> completes, so startup code reads the stored preferences.
+    /// </summary>
+    private readonly Func<string, Dictionary<string, string>?>? _synchronousLoader;
+
+    private readonly object _loadLock = new();
+
+    public BlazorPreferences()
+    {
+    }
+
+    internal BlazorPreferences(Func<string, Dictionary<string, string>?>? synchronousLoader)
+    {
+        _synchronousLoader = synchronousLoader;
+    }
+
+    private void EnsureLoaded()
+    {
+        if (_loaded || _synchronousLoader is not { } loader)
+            return;
+        lock (_loadLock)
+        {
+            if (_loaded)
+                return;
+            if (loader(KeyPrefix) is { } all)
+                Load(all);
+        }
+    }
+
+    private void Load(Dictionary<string, string> all)
+    {
+        foreach (var (k, v) in all)
+        {
+            if (!_touchedBeforeLoad.ContainsKey(k)
+                && !_clearedBeforeLoad.Keys.Any(prefix => k.StartsWith(prefix, StringComparison.Ordinal)))
+                _cache.TryAdd(k, v);
+        }
+        _loaded = true;
+        _touchedBeforeLoad.Clear();
+        _clearedBeforeLoad.Clear();
+    }
+
     private void Touch(string storageKey)
     {
         if (!_loaded)
@@ -49,7 +93,7 @@ internal sealed class BlazorPreferences : IPreferences
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new();
 
     private static string GetContainer(string? sharedName) => KeyPrefix + (sharedName ?? "_default") + ":";
-    private static string GetStorageKey(string key, string? sharedName) => GetContainer(sharedName) + key;
+    internal static string GetStorageKey(string key, string? sharedName) => GetContainer(sharedName) + key;
 
     private SemaphoreSlim GetLock(string storageKey)
         => _locks.GetOrAdd(storageKey, _ => new SemaphoreSlim(1, 1));
@@ -62,18 +106,18 @@ internal sealed class BlazorPreferences : IPreferences
     {
         try
         {
+            EnsureLoaded();
+            if (_loaded)
+                return;
+
             var all = await BlazorEssentials.Module.InvokeAsync<Dictionary<string, string>>("prefsGetAll", KeyPrefix)
                 .ConfigureAwait(false);
 
-            foreach (var (k, v) in all ?? [])
+            lock (_loadLock)
             {
-                if (!_touchedBeforeLoad.ContainsKey(k)
-                    && !_clearedBeforeLoad.Keys.Any(prefix => k.StartsWith(prefix, StringComparison.Ordinal)))
-                    _cache.TryAdd(k, v);
+                if (!_loaded)
+                    Load(all ?? []);
             }
-            _loaded = true;
-            _touchedBeforeLoad.Clear();
-            _clearedBeforeLoad.Clear();
         }
 #if DEBUG
         catch (Exception ex)
@@ -89,10 +133,14 @@ internal sealed class BlazorPreferences : IPreferences
     }
 
     public bool ContainsKey(string key, string? sharedName = null)
-        => _cache.ContainsKey(GetStorageKey(key, sharedName));
+    {
+        EnsureLoaded();
+        return _cache.ContainsKey(GetStorageKey(key, sharedName));
+    }
 
     public void Remove(string key, string? sharedName = null)
     {
+        EnsureLoaded();
         var storageKey = GetStorageKey(key, sharedName);
         Touch(storageKey);
         // Before the load, the key may exist in localStorage without being in the cache yet.
@@ -102,6 +150,7 @@ internal sealed class BlazorPreferences : IPreferences
 
     public void Clear(string? sharedName = null)
     {
+        EnsureLoaded();
         var prefix = GetContainer(sharedName);
         if (!_loaded)
         {
@@ -120,6 +169,7 @@ internal sealed class BlazorPreferences : IPreferences
     public void Set<T>(string key, T value, string? sharedName = null)
     {
         EnsureSupported<T>();
+        EnsureLoaded();
         var storageKey = GetStorageKey(key, sharedName);
         Touch(storageKey);
 
@@ -164,6 +214,7 @@ internal sealed class BlazorPreferences : IPreferences
     public T Get<T>(string key, T defaultValue, string? sharedName = null)
     {
         EnsureSupported<T>();
+        EnsureLoaded();
         if (!_cache.TryGetValue(GetStorageKey(key, sharedName), out var stored))
             return defaultValue;
 
@@ -172,7 +223,12 @@ internal sealed class BlazorPreferences : IPreferences
             var type = typeof(T);
             var underlying = Nullable.GetUnderlyingType(type) ?? type;
             if (underlying == typeof(DateTime))
+            {
+                // A long is DateTime.ToBinary(), the format of the MAUI desktop implementations (imported preferences).
+                if (long.TryParse(stored, NumberStyles.Integer, CultureInfo.InvariantCulture, out var binary))
+                    return (T)(object)DateTime.FromBinary(binary);
                 return (T)(object)DateTime.Parse(stored, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+            }
             if (underlying == typeof(DateTimeOffset))
                 return (T)(object)DateTimeOffset.Parse(stored, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
             return (T)Convert.ChangeType(stored, underlying, CultureInfo.InvariantCulture);

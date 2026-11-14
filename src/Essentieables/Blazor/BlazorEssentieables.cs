@@ -19,7 +19,12 @@ using System.Threading.Tasks;
 namespace Essentieables;
 
 /// <summary>
-/// Entry point of the Blazor implementations.
+/// Entry point of the browser implementations, shared by Blazor and Avalonia.Browser.
+/// <para>
+/// <b>Avalonia.Browser</b> (<c>ESSENTIEABLES_AVALONIA_BROWSER</c>): <c>UseEssentieables()</c> registers these implementations
+/// and starts <c>InitializeAsync()</c>; the JS interop goes through <c>AvaloniaBrowserJSRuntime</c>.
+/// One user per process, as in Blazor WebAssembly.
+/// </para>
 /// <para>
 /// <b>Blazor WebAssembly</b>: one user per process. The services are singletons and the static
 /// MAUI facades point at them directly.
@@ -111,6 +116,133 @@ internal static class BlazorEssentials
             () => new BlazorVersionTracking(preferences, appInfo),
             ServiceLifetime.Singleton);
     }
+
+#if ESSENTIEABLES_AVALONIA_BROWSER
+    static Task? s_avaloniaInitialization;
+
+    /// <summary>
+    /// Avalonia.Browser: registers the browser implementations (the screenshot comes from Avalonia, which renders the visual tree),
+    /// installs them behind the MAUI facades and starts <see cref="InitializeAsync()"/>. Called by <c>UseEssentieables()</c>.
+    /// </summary>
+    internal static void UseAvaloniaBrowser(IServiceCollection services, IScreenshot screenshot)
+    {
+        var appInfo = new BlazorAppInfo();
+        // Preferences can be read before the JS module is imported (App.OnFrameworkInitializationCompleted…):
+        // [JSImport] is synchronous, so the stored values are loaded on first use.
+        var preferences = new BlazorPreferences(AvaloniaBrowserStorage.LoadPreferences);
+        var browser = new BlazorBrowser();
+        var secureStorage = new BlazorSecureStorage();
+        var accelerometer = new BlazorAccelerometer();
+        var battery = new BlazorBattery();
+        var compass = new BlazorCompass();
+        var connectivity = new BlazorConnectivity();
+        var deviceDisplay = new BlazorDeviceDisplay();
+        var deviceInfo = new BlazorDeviceInfo();
+        var geolocation = new BlazorGeolocation();
+        var gyroscope = new BlazorGyroscope();
+        var hapticFeedback = new BlazorHapticFeedback();
+        var mediaPicker = new BlazorMediaPicker();
+        var orientationSensor = new BlazorOrientationSensor();
+        var share = new BlazorShare();
+        var vibration = new BlazorVibration();
+
+        services.SetDefaults(
+            accelerometer,
+            new BlazorAppActions(),
+            appInfo,
+            new BlazorBarometer(),
+            battery,
+            browser,
+            new BlazorClipboard(),
+            compass,
+            connectivity,
+            new BlazorContacts(),
+            deviceDisplay,
+            deviceInfo,
+            new BlazorEmail(),
+            new BlazorFilePicker(),
+            new BlazorFileSystem(),
+            new BlazorFlashlight(),
+            new BlazorGeocoding(),
+            geolocation,
+            gyroscope,
+            hapticFeedback,
+            new BlazorLauncher(),
+            new BlazorMagnetometer(),
+            new BlazorMap(browser),
+            mediaPicker,
+            orientationSensor,
+            new BlazorPhoneDialer(),
+            preferences,
+            screenshot,
+            () => secureStorage,
+            new BlazorSemanticScreenReader(),
+            share,
+            new BlazorSms(),
+            new BlazorTextToSpeech(),
+            vibration,
+            new BlazorWebAuthenticator(),
+            () => new BlazorVersionTracking(preferences, appInfo),
+            ServiceLifetime.Singleton);
+
+        services.TryAddSingleton<IJSRuntime>(AvaloniaBrowserJSRuntime.Instance);
+
+        // The services InitializeAsync initializes, without requiring a built container.
+        var provider = s_avaloniaProvider = new InstanceServiceProvider(new()
+        {
+            [typeof(IJSRuntime)] = AvaloniaBrowserJSRuntime.Instance,
+            [typeof(IAccelerometer)] = accelerometer,
+            [typeof(IAppInfo)] = appInfo,
+            [typeof(IBattery)] = battery,
+            [typeof(ICompass)] = compass,
+            [typeof(IConnectivity)] = connectivity,
+            [typeof(IDeviceDisplay)] = deviceDisplay,
+            [typeof(IDeviceInfo)] = deviceInfo,
+            [typeof(IGeolocation)] = geolocation,
+            [typeof(IGyroscope)] = gyroscope,
+            [typeof(IHapticFeedback)] = hapticFeedback,
+            [typeof(IMediaPicker)] = mediaPicker,
+            [typeof(IOrientationSensor)] = orientationSensor,
+            [typeof(IPreferences)] = preferences,
+            [typeof(ISecureStorage)] = secureStorage,
+            [typeof(IShare)] = share,
+            [typeof(IVibration)] = vibration,
+        });
+
+        var initialization = InitializeAsync(provider);
+        _ = initialization.ContinueWith(
+            static t => Console.Error.WriteLine($"Essentieables: browser initialization failed: {t.Exception?.GetBaseException()}"),
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+        s_avaloniaInitialization = initialization;
+    }
+
+    /// <summary>
+    /// Avalonia.Browser: completes when the JS modules are imported and the services that cache browser state (preferences,
+    /// connectivity, device info, persistent file system…) are initialized. <c>UseEssentieables()</c> starts it: await it
+    /// before using the asynchronous Essentials APIs (it replaces <c>Platform.Initialize()</c> of Avae.Browser.Essentials).
+    /// </summary>
+    public static Task InitializeAsync()
+    {
+        var initialization = s_avaloniaInitialization;
+        if (initialization is null || s_avaloniaProvider is null)
+            throw new InvalidOperationException("Call UseEssentieables() before BlazorEssentials.InitializeAsync().");
+        // A failed attempt (EssentieablesInterop.js not served yet, network error…) is retried.
+        if (initialization.IsFaulted || initialization.IsCanceled)
+            s_avaloniaInitialization = initialization = InitializeAsync(s_avaloniaProvider);
+        return initialization;
+    }
+
+    sealed class InstanceServiceProvider(System.Collections.Generic.Dictionary<Type, object> services) : IServiceProvider
+    {
+        public object? GetService(Type serviceType)
+            => services.TryGetValue(serviceType, out var service) ? service : null;
+    }
+
+    static InstanceServiceProvider? s_avaloniaProvider;
+#endif
+
 #else
     static void AddServerServices(IServiceCollection services)
     {
@@ -223,6 +355,10 @@ internal static class BlazorEssentials
     internal static void EnsureInitialized() => _ = Module;
 
     static InvalidOperationException NotInitialized() => new(
+#if ESSENTIEABLES_AVALONIA_BROWSER
+        "Essentieables is not initialized yet. Await 'BlazorEssentials.InitializeAsync()' (started by UseEssentieables()) " +
+        "before using the asynchronous Essentials APIs, and check that wwwroot/EssentieablesInterop.js and BlazorEssentials.js are served.");
+#else
         IsServer
             ? "Blazor Essentials is not initialized for this circuit. Call " +
               "'await BlazorEssentials.InitializeAsync(serviceProvider)' from an interactive component " +
@@ -230,6 +366,7 @@ internal static class BlazorEssentials
             : "Blazor Essentials is not initialized. Call " +
               "'await BlazorEssentials.InitializeAsync(serviceProvider)' during app startup " +
               "before using Essentials APIs.");
+#endif
 
     /// <summary>
     /// Imports <c>./BlazorEssentials.js</c> and initializes the services that cache browser state.
@@ -258,10 +395,23 @@ internal static class BlazorEssentials
 
         await session.InitializeAsync(async () =>
         {
+#if ESSENTIEABLES_AVALONIA_BROWSER
+            // Avalonia.Browser has no Blazor dispatcher: attach the one of EssentieablesInterop.js first. Failures propagate,
+            // so the task returned by InitializeAsync() reports them (missing wwwroot/EssentieablesInterop.js…).
+            await AvaloniaBrowserJSRuntime.AttachAsync().ConfigureAwait(false);
+#endif
             var module = await ImportModuleAsync(provider.GetRequiredService<IJSRuntime>()).ConfigureAwait(false);
+#if ESSENTIEABLES_AVALONIA_BROWSER
+            // No prerendering nor circuit here: a missing module is an error worth reporting through the task.
+            if (module is null)
+                throw new InvalidOperationException("BlazorEssentials.js could not be imported: check that it is served next to index.html (wwwroot/).");
+#else
             if (module is null)
                 return false;
+#endif
             session.Module = module;
+            if (!IsServer)
+                await BlazorFileSystem.MountPersistentStorageAsync(module).ConfigureAwait(false);
             await InitializeServicesAsync(session.Services).ConfigureAwait(false);
             return true;
         }).ConfigureAwait(false);
@@ -365,14 +515,15 @@ internal sealed class BlazorEssentialsSession : IAsyncDisposable
 
     /// <summary>
     /// A directory private to this session. Server: under the temp folder, keyed by the session id, and
-    /// deleted when the circuit ends. WebAssembly: the in-memory file system of the browser tab.
+    /// deleted when the circuit ends. WebAssembly: <c>/_cache</c> and <c>/_appdata</c> in the file system of the browser tab,
+    /// kept in IndexedDB when the app links IDBFS (see <see cref="BlazorFileSystem.IsPersistent"/>).
     /// </summary>
     internal string GetDirectory(string name)
     {
         var root = _rootDirectory ??= BlazorEssentials.IsServer
             ? Path.Combine(Path.GetTempPath(), "essentieables", Id)
             : "/";
-        var path = Path.Combine(root, name);
+        var path = Path.Combine(root, BlazorEssentials.IsServer ? name : BlazorFileSystem.GetBrowserDirectoryName(name));
         Directory.CreateDirectory(path);
         return path;
     }

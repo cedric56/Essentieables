@@ -3,6 +3,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Maui.ApplicationModel;
+using Microsoft.Maui.Storage;
 using System;
 using System.Collections.Generic;
 //using AvaloniaFileSystem = Avalonia.Controls.Maui.Essentials.AvaloniaFileSystem;
@@ -78,9 +79,24 @@ internal static class AvaloniaExtensions
         // for selected services.
         if (OperatingSystem.IsWindows())
         {
+            // The jump list: AppActionActivated is raised for the action the app was launched with, and a launch while the app
+            // runs is handed to the running instance (as UseMauiEssentials() of Avae.Windows.Essentials did).
+            var appActions = OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10586, 0) ? new OriginalAppActionsImplementation() : null;
+            if (appActions is not null && OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10586, 0))
+                AvaeAppActionsActivation.Initialize(appActions);
+
+            // The MAUI locations (%LOCALAPPDATA%\<Publisher>\<Package>, ApplicationData when packaged), so the files and preferences of
+            // apps migrated from Avae.Windows.Essentials are found again. Package files missing on disk are read from avares://.
+            IFileSystem windowsFileSystem = OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0)
+                ? new OriginalFileSystemImplementation(fileSystem)
+                : fileSystem;
+            IPreferences windowsPreferences = OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0)
+                ? new OriginalPreferencesImplementation(windowsFileSystem)
+                : preferences;
+
             services.SetDefaults(
                 OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalAccelerometerImplementation() : null!,
-                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10586, 0) ? new OriginalAppActionsImplementation() : null!,
+                appActions!,
                 OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new AvaeAppInfo(platformProvider) : null!,
                 OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalBarometerImplementation() : null!,
                 OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalBatteryImplementation() : null!,
@@ -93,7 +109,7 @@ internal static class AvaloniaExtensions
                 OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalDeviceInfoImplementation() : null!,
                 new Essentieables.AvaeEmail(),
                 filepicker,
-                fileSystem,
+                windowsFileSystem,
                 OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalFlashlightImplementation() : null!,
 #if WINDOWS
                 OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17763, 0) ? Microsoft.Maui.Devices.Sensors.Geocoding.Default : null!,
@@ -109,7 +125,7 @@ internal static class AvaloniaExtensions
                 OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new AvaeMediaPicker(platformProvider, mediapicker) : null!,
                 OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalOrientationSensorImplementation() : null!,
                 new AvaePhoneDialer(),
-                preferences,
+                windowsPreferences,
                 screenshot,
                 () => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalSecureStorageImplementation() : null!,
                 OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new AvaeSemanticScreenReader(platformProvider) : null!,
@@ -117,7 +133,8 @@ internal static class AvaloniaExtensions
                 OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalSmsImplementation() : null!,
                 OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalTextToSpeechImplementation() : null!,
                 OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalVibrationImplementation() : null!,
-                webAuthenticator,
+                // Loopback callbacks (http://localhost:port/) in the system browser, the others in the Avalonia broker.
+                new AvaeWebAuthenticator(webAuthenticator),
                 () => Microsoft.Maui.ApplicationModel.VersionTracking.Default);
         }
         else
@@ -162,7 +179,7 @@ internal static class AvaloniaExtensions
                 new Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Communication.LinuxSms(),
                 new Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Media.LinuxTextToSpeech(),
                 new Microsoft.Maui.Platforms.Linux.Gtk4.Essentials.Devices.LinuxVibration(),
-                webAuthenticator,
+                new AvaeWebAuthenticator(webAuthenticator),
                 () => VersionTracking.Default);
         }
         else
@@ -186,7 +203,7 @@ internal static class AvaloniaExtensions
                 (Microsoft.Maui.ApplicationModel.DataTransfer.IClipboard)MacosDefaults.CreateClipboard(),
                 null!,
                 (Microsoft.Maui.Networking.IConnectivity)MacosDefaults.CreateConnectivity(),
-                null!,
+                new AvaeMacContacts(),
                 (Microsoft.Maui.Devices.IDeviceDisplay)MacosDefaults.CreateDeviceDisplay(),
                 (Microsoft.Maui.Devices.IDeviceInfo)MacosDefaults.CreateDeviceInfo(),
                 (Microsoft.Maui.ApplicationModel.Communication.IEmail)MacosDefaults.CreateEmail(),
@@ -200,7 +217,8 @@ internal static class AvaloniaExtensions
                 (Microsoft.Maui.ApplicationModel.ILauncher)MacosDefaults.CreateLauncher(),
                 null!,
                 (Microsoft.Maui.ApplicationModel.IMap)MacosDefaults.CreateMap(),
-                mediapicker,
+                // Picking through Avalonia, capturing in a camera window (AVFoundation).
+                new AvaeMacMediaPicker(mediapicker),
                 null!,
                 (Microsoft.Maui.ApplicationModel.Communication.IPhoneDialer)MacosDefaults.CreatePhoneDialer(),
                 preferences,
@@ -211,12 +229,23 @@ internal static class AvaloniaExtensions
                 (Microsoft.Maui.ApplicationModel.Communication.ISms)MacosDefaults.CreateSms(),
                 (Microsoft.Maui.Media.ITextToSpeech)MacosDefaults.CreateTextToSpeech(),
                 (Microsoft.Maui.Devices.IVibration)MacosDefaults.CreateVibration(),
-                webAuthenticator,
+                // Loopback callbacks in the system browser, the others in ASWebAuthenticationSession.
+                new AvaeWebAuthenticator(new AvaeMacWebAuthenticator()),
                 () => Microsoft.Maui.ApplicationModel.VersionTracking.Default);
         }
         else
 #endif
-        // Browser: register only the services supported by this environment.
+#if ESSENTIEABLES_AVALONIA_BROWSER
+        // Browser: the implementations shared with Blazor (Blazor/*.cs and BlazorEssentials.js), run through
+        // AvaloniaBrowserJSRuntime. Only the screenshot comes from Avalonia, which renders its own visual tree.
+        // BlazorEssentials.InitializeAsync() is started here: await it before using the asynchronous APIs.
+        if (OperatingSystem.IsBrowser())
+        {
+            BlazorEssentials.UseAvaloniaBrowser(services, screenshot);
+        }
+        else
+#endif
+        // Browser without the shared implementations (not compiled for this target): the Avalonia ones only.
         // Unsupported APIs are passed as null so SetDefaults can handle them.
         if (OperatingSystem.IsBrowser())
         {

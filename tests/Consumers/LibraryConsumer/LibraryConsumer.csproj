@@ -8,6 +8,8 @@
     <TargetFrameworks>net10.0</TargetFrameworks>
     <TargetFrameworks Condition="'$(ConsumerTargetFrameworks)' != ''">$(ConsumerTargetFrameworks)</TargetFrameworks>
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24</SupportedOSPlatformVersion>
+    <!-- Browser: the injected sources use [JSImport], as an Avalonia.Browser head does. -->
+    <AllowUnsafeBlocks Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'browser'">true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>

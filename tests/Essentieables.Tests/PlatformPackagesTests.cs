@@ -40,6 +40,31 @@ public class PlatformPackagesTests
         Assert.All(groups.Values, packages => Assert.Contains("Essentieables", packages));
     }
 
+    [Fact]
+    public void Only_the_browser_group_brings_JSInterop()
+    {
+        // Avalonia.Browser runs the browser implementations shared with Blazor, through AvaloniaBrowserJSRuntime.
+        foreach (var (framework, packages) in Groups())
+        {
+            if (framework.StartsWith("net10.0-browser", StringComparison.Ordinal))
+                Assert.Contains("Microsoft.JSInterop", packages);
+            else
+                Assert.DoesNotContain("Microsoft.JSInterop", packages);
+        }
+    }
+
+    [Fact]
+    public void The_browser_assets_ship_with_the_Blazor_sources()
+    {
+        var blazor = Path.Combine(Root(), "src", "Essentieables", "Blazor");
+        foreach (var asset in new[] { "BlazorEssentials.js", "EssentieablesInterop.js", "dotnet-js-interop.js" })
+            Assert.True(File.Exists(Path.Combine(blazor, asset)), asset);
+
+        var targets = File.ReadAllText(Path.Combine(Root(), "src", "Essentieables", "build", "Essentieables.targets"));
+        Assert.Contains("ESSENTIEABLES_AVALONIA_BROWSER", targets, StringComparison.Ordinal);
+        Assert.Contains("EssentieablesInterop.js", targets, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("android")]
     [InlineData("ios")]

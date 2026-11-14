@@ -5,7 +5,7 @@
     <version>$version$</version>
     <authors>Cedric Boutin</authors>
     <copyright>Copyright (c) 2026 Cedric Boutin</copyright>
-    <description>Essentieables for an Avalonia app: Essentieables and the packages its Avalonia sources use, for each target framework (GTK4 Essentials and the Windows contracts on net10.0 only, the macOS Essentials on net10.0-macos, nothing more on Android, iOS and the browser).</description>
+    <description>Essentieables for an Avalonia app: Essentieables and the packages its Avalonia sources use, for each target framework (GTK4 Essentials and the Windows contracts on net10.0 only, the macOS Essentials on net10.0-macos, Microsoft.JSInterop in the browser, nothing more on Android and iOS).</description>
     <license type="expression">MIT</license>
     <readme>README.md</readme>
     <tags>maui essentials avalonia</tags>
@@ -41,9 +41,11 @@
         <dependency id="Essentieables" version="$version$" />
         <dependency id="Avalonia.Controls.WebView" version="12.1.1" />
       </group>
+      <!-- Avalonia.Browser runs the browser implementations shared with Blazor: they use IJSRuntime (AvaloniaBrowserJSRuntime). -->
       <group targetFramework="net10.0-browser1.0">
         <dependency id="Essentieables" version="$version$" />
         <dependency id="Avalonia.Controls.WebView" version="12.1.1" />
+        <dependency id="Microsoft.JSInterop" version="10.0.0" />
       </group>
     </dependencies>
   </metadata>

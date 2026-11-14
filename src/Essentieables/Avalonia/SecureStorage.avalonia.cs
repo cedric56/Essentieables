@@ -124,11 +124,14 @@ namespace Essentieables;
 class OriginalUnpackagedSecureStorageImplementation
     : ISecureStorageImplementation
 {
+    // Settings\securestorage.dat next to FileSystem.AppDataDirectory, as in MAUI and Avae.Windows.Essentials
+    // (%LOCALAPPDATA%\<Publisher>\<Package>\Settings).
     private static readonly string AppSecureStoragePath =
-        Path.Combine(
+        Path.GetFullPath(Path.Combine(
             FileSystem.AppDataDirectory,
+            "..",
             "Settings",
-            "securestorage.dat");
+            "securestorage.dat"));
 
     private readonly object _gate = new();
     private readonly SecureStorageDictionary _secureStorage = new();
@@ -142,12 +145,16 @@ class OriginalUnpackagedSecureStorageImplementation
     {
         lock (_gate)
         {
-            if (!File.Exists(AppSecureStoragePath))
+            // Values written by the preview builds of Essentieables are read when the file of MAUI does not exist yet.
+            var path = File.Exists(AppSecureStoragePath)
+                ? AppSecureStoragePath
+                : OriginalUnpackagedPreferencesImplementation.PreviewPath("securestorage.dat");
+            if (!File.Exists(path))
                 return;
 
             try
             {
-                using var stream = File.OpenRead(AppSecureStoragePath);
+                using var stream = File.OpenRead(path);
 
                 var loaded = JsonSerializer.Deserialize(
                     stream,

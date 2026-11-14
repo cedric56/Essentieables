@@ -16,8 +16,12 @@ internal class AvaeTopLevelStateManager : IAvaloniaEssentialsPlatformProvider
 
     public event EventHandler? ActiveTopLevelChanged;
 
+    /// <summary>The manager created by the last <c>UseEssentieables()</c> call.</summary>
+    internal static AvaeTopLevelStateManager? Current { get; private set; }
+
     public AvaeTopLevelStateManager()
     {
+        Current = this;
         TopLevel.GotFocusEvent.AddClassHandler(typeof(TopLevel), (sender, args) =>
         {
             OnActivated((TopLevel)sender!);

@@ -14,9 +14,22 @@ using Windows.Storage;
 
 namespace Essentieables
 {
+    /// <summary>
+    /// The Windows file system of MAUI and Avae.Windows.Essentials: <c>%LOCALAPPDATA%\&lt;Publisher&gt;\&lt;Package&gt;\Data</c> and
+    /// <c>…\Cache</c> (the ApplicationData folders when packaged), so the files of apps migrated from Avae.Windows.Essentials
+    /// are found again. App package files are read from the app folder, then from the Avalonia resources (<c>avares://</c>).
+    /// </summary>
     [SupportedOSPlatform("windows10.0.10240")]
     partial class OriginalFileSystemImplementation : IFileSystem
     {
+        readonly IFileSystem? _assets;
+
+        /// <param name="assets">Where app package files missing from the app folder are looked for (Avalonia resources).</param>
+        public OriginalFileSystemImplementation(IFileSystem? assets = null)
+        {
+            _assets = assets;
+        }
+
         private readonly Lazy<string> _platformCacheDirectory = new(valueFactory: () =>
         {
             if (AppInfoUtils.IsPackagedApp)
@@ -70,6 +83,10 @@ namespace Essentieables
             if (filename == null)
                 throw new ArgumentNullException(nameof(filename));
 
+            var file = OriginalFileSystemUtils.PlatformGetFullAppPackageFilePath(filename);
+            if (!File.Exists(file) && _assets is not null)
+                return _assets.OpenAppPackageFileAsync(filename);
+
             if (AppInfoUtils.IsPackagedApp)
             {
                 filename = OriginalFileSystemUtils.NormalizePath(filename);
@@ -78,15 +95,16 @@ namespace Essentieables
             }
             else
             {
-                var file = OriginalFileSystemUtils.PlatformGetFullAppPackageFilePath(filename);
                 return Task.FromResult((Stream)File.OpenRead(file));
             }
         }
 
-        public Task<bool> AppPackageFileExistsAsync(string filename)
+        public async Task<bool> AppPackageFileExistsAsync(string filename)
         {
             var file = OriginalFileSystemUtils.PlatformGetFullAppPackageFilePath(filename);
-            return Task.FromResult(File.Exists(file));
+            if (File.Exists(file))
+                return true;
+            return _assets is not null && await _assets.AppPackageFileExistsAsync(filename).ConfigureAwait(false);
         }
     }
 }

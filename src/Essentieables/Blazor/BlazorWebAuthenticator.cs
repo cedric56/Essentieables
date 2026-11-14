@@ -10,8 +10,29 @@ using System.Linq;
 
 namespace Essentieables;
 
+/// <summary>
+/// Two modes:
+/// <list type="bullet">
+/// <item><b>Start endpoint</b> (default in Blazor): the popup opens <c>/auth/start</c>, an endpoint of the server app that runs the
+/// sign-in and redirects to <c>/auth/popup-complete</c> (see <see cref="BlazorEssentials.UseWebAuthenticator"/>).</item>
+/// <item><b>Direct</b> (default in Avalonia.Browser, where there is usually no server): the popup opens
+/// <see cref="WebAuthenticatorOptions.Url"/> and completes when the provider redirects it to
+/// <see cref="WebAuthenticatorOptions.CallbackUrl"/>, which must be on the origin of the app.</item>
+/// </list>
+/// </summary>
 internal class BlazorWebAuthenticator : IWebAuthenticator
 {
+    /// <summary>
+    /// True: go through the <c>/auth/start</c> endpoint of the server. False: open the provider directly. Defaults to false in
+    /// Avalonia.Browser apps, true in Blazor apps.
+    /// </summary>
+    public static bool UseStartEndpoint { get; set; } =
+#if ESSENTIEABLES_AVALONIA_BROWSER
+        false;
+#else
+        true;
+#endif
+
     public Task<WebAuthenticatorResult> AuthenticateAsync(
         WebAuthenticatorOptions options)
         => AuthenticateAsync(options, CancellationToken.None);
@@ -23,22 +44,37 @@ internal class BlazorWebAuthenticator : IWebAuthenticator
         ArgumentNullException.ThrowIfNull(options);
         cancellationToken.ThrowIfCancellationRequested();
 
-        // Replace these with the actual properties on your options.
         var authenticationUrl = options.Url;
         var callbackUrl = options.CallbackUrl;
 
-        var url = BuildStartUrl(new Dictionary<string, string?>
+        string? callbackUri;
+        if (UseStartEndpoint)
         {
-            ["returnUrl"] = "/auth/popup-complete",
-            ["authenticationUrl"] = authenticationUrl?.ToString(),
-            ["callbackUrl"] = callbackUrl?.ToString()
-        });
+            var url = BuildStartUrl(new Dictionary<string, string?>
+            {
+                ["returnUrl"] = "/auth/popup-complete",
+                ["authenticationUrl"] = authenticationUrl?.ToString(),
+                ["callbackUrl"] = callbackUrl?.ToString()
+            });
 
-        var callbackUri = await BlazorEssentials.Module
-            .InvokeAsync<string>(
-                "authenticate",
-                cancellationToken,
-                url);
+            callbackUri = await BlazorEssentials.Module
+                .InvokeAsync<string>(
+                    "authenticate",
+                    cancellationToken,
+                    url);
+        }
+        else
+        {
+            ArgumentNullException.ThrowIfNull(authenticationUrl);
+            ArgumentNullException.ThrowIfNull(callbackUrl);
+
+            callbackUri = await BlazorEssentials.Module
+                .InvokeAsync<string>(
+                    "authenticateDirect",
+                    cancellationToken,
+                    authenticationUrl.ToString(),
+                    callbackUrl.ToString());
+        }
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -48,7 +84,7 @@ internal class BlazorWebAuthenticator : IWebAuthenticator
                 "Authentication completed without a callback URI.");
         }
 
-        return new WebAuthenticatorResult(new Uri(callbackUri));
+        return new WebAuthenticatorResult(new Uri(callbackUri), options.ResponseDecoder);
     }
 
     // Microsoft.AspNetCore.WebUtilities is not available in Blazor WebAssembly projects.

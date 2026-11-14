@@ -7,6 +7,8 @@
       Blazor   : project uses Microsoft.NET.Sdk.Web or Microsoft.NET.Sdk.BlazorWebAssembly
                  (Web SDK outside the browser = Blazor Server: ESSENTIEABLES_BLAZOR_SERVER, per-circuit services)
       Avalonia : project references Avalonia (directly, transitively or via a ProjectReference)
+                 (built for the browser = Avalonia.Browser: ESSENTIEABLES_AVALONIA_BROWSER, the Blazor sources are compiled too
+                  and run through AvaloniaBrowserJSRuntime, see Blazor/EssentieablesInterop.js)
 
     To override detection: <EssentieablesHost>Avalonia</EssentieablesHost>, Blazor, or None.
     In a multi-project Avalonia app (shared App library + Desktop/Android/iOS heads), set None in the
@@ -23,6 +25,11 @@
 
     <_EssentieablesBlazor Condition="'$(EssentieablesHost)' == 'Blazor'">true</_EssentieablesBlazor>
     <_EssentieablesBlazor Condition="'$(EssentieablesHost)' == '' and ('$(UsingMicrosoftNETSdkWeb)' == 'true' or '$(UsingMicrosoftNETSdkBlazorWebAssembly)' == 'true')">true</_EssentieablesBlazor>
+
+    <!-- The browser implementations exchange JSON with JS through Microsoft.JSInterop, which serializes with reflection.
+         A trimmed WebAssembly app turns that off by default (the Blazor SDK turns it back on): keep it on unless the app
+         decided otherwise. Set here, at evaluation, before the SDK applies its default. -->
+    <JsonSerializerIsReflectionEnabledByDefault Condition="'$(JsonSerializerIsReflectionEnabledByDefault)' == '' and '$(_EssentieablesIsBrowser)' == 'true' and '$(EssentieablesHost)' != 'None'">true</JsonSerializerIsReflectionEnabledByDefault>
   </PropertyGroup>
 
   <!--
@@ -35,7 +42,9 @@
       ESSENTIEABLES_WINDOWS : the Windows ports (WinRT, Win32), on net10.0 and net10.0-windows*
       ESSENTIEABLES_LINUX   : the GTK4 Essentials of maui-labs, on net10.0
       MACOS (SDK)           : the macOS Essentials of maui-labs, on net10.0-macos
-    Android, iOS and browser apps compile none of them.
+      ESSENTIEABLES_AVALONIA_BROWSER : the browser implementations shared with Blazor (Blazor/*.cs), in an Avalonia app built
+                              for the browser (net10.0-browser, or RuntimeIdentifier browser-wasm)
+    Android, iOS and browser apps compile none of the first three.
   -->
   <Target Name="_EssentieablesAddSources" AfterTargets="ResolveAssemblyReferences">
     <PropertyGroup>
@@ -44,13 +53,16 @@
       <_EssentieablesFlavorExcluded Condition="'$(_EssentieablesIsBrowser)' == 'true'">Default</_EssentieablesFlavorExcluded>
       <_EssentieablesFlavorExcluded Condition="'$(_EssentieablesIsBrowser)' != 'true'">Browser</_EssentieablesFlavorExcluded>
       <_EssentieablesTargetPlatform>$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)'))</_EssentieablesTargetPlatform>
-      <_EssentieablesWindows Condition="'$(_EssentieablesTargetPlatform)' == '' or '$(_EssentieablesTargetPlatform)' == 'windows'">true</_EssentieablesWindows>
-      <_EssentieablesLinux Condition="'$(_EssentieablesTargetPlatform)' == '' or '$(_EssentieablesTargetPlatform)' == 'linux'">true</_EssentieablesLinux>
+      <_EssentieablesWindows Condition="'$(_EssentieablesIsBrowser)' != 'true' and ('$(_EssentieablesTargetPlatform)' == '' or '$(_EssentieablesTargetPlatform)' == 'windows')">true</_EssentieablesWindows>
+      <_EssentieablesLinux Condition="'$(_EssentieablesIsBrowser)' != 'true' and ('$(_EssentieablesTargetPlatform)' == '' or '$(_EssentieablesTargetPlatform)' == 'linux')">true</_EssentieablesLinux>
+      <!-- Avalonia.Browser: the Blazor sources run there too (a Blazor project that references Avalonia keeps the Blazor setup). -->
+      <_EssentieablesAvaloniaBrowser Condition="'$(_EssentieablesAvalonia)' == 'true' and '$(_EssentieablesIsBrowser)' == 'true' and '$(_EssentieablesBlazor)' != 'true'">true</_EssentieablesAvaloniaBrowser>
     </PropertyGroup>
 
     <PropertyGroup Condition="'$(_EssentieablesAvalonia)' == 'true'">
       <DefineConstants Condition="'$(_EssentieablesWindows)' == 'true'">$(DefineConstants);ESSENTIEABLES_WINDOWS</DefineConstants>
       <DefineConstants Condition="'$(_EssentieablesLinux)' == 'true'">$(DefineConstants);ESSENTIEABLES_LINUX</DefineConstants>
+      <DefineConstants Condition="'$(_EssentieablesAvaloniaBrowser)' == 'true'">$(DefineConstants);ESSENTIEABLES_AVALONIA_BROWSER</DefineConstants>
     </PropertyGroup>
 
     <ItemGroup Condition="'$(_EssentieablesAvalonia)' == 'true'">
@@ -72,6 +84,11 @@
       <_EssentieablesRequiredPackage
           Include="Microsoft.Maui.Platforms.MacOS.Essentials"
           Condition="'$(_EssentieablesTargetPlatform)' == 'macos'" />
+
+      <!-- Avalonia.Browser: the shared browser implementations use IJSRuntime -->
+      <_EssentieablesRequiredPackage
+          Include="Microsoft.JSInterop"
+          Condition="'$(_EssentieablesAvaloniaBrowser)' == 'true'" />
 
       <_EssentieablesResolvedPackage Include="@(ReferencePath->'%(NuGetPackageId)')" />
 
@@ -96,6 +113,12 @@
       <Compile Include="$(_EssentieablesSources)Blazor\**\*.cs" />
     </ItemGroup>
 
+    <!-- Avalonia.Browser: the browser implementations shared with Blazor, except the Razor component (no ASP.NET Core there). -->
+    <ItemGroup Condition="'$(_EssentieablesAvaloniaBrowser)' == 'true'">
+      <Compile Include="$(_EssentieablesSources)Blazor\**\*.cs"
+               Exclude="$(_EssentieablesSources)Blazor\BlazorEssentialsInitializer.cs" />
+    </ItemGroup>
+
     <!-- Blazor Server (Web SDK, not running in the browser): one set of services per circuit.
          Set <EssentieablesBlazorServer>false</EssentieablesBlazorServer> in a Web SDK project that only hosts
          a WebAssembly client and never renders interactive server components. -->
@@ -108,17 +131,26 @@
     </PropertyGroup>
   </Target>
 
-  <!-- Blazor: the JS module is imported from ./BlazorEssentials.js, so it is copied to wwwroot/. -->
+  <!-- Blazor: the JS module is imported from ./BlazorEssentials.js, so it is copied to wwwroot/.
+       Avalonia.Browser (a browser project that is not a Blazor one) also gets EssentieablesInterop.js and dotnet-js-interop.js,
+       the JS interop dispatcher Blazor would otherwise provide. Decided at evaluation (Avalonia is only known after reference
+       resolution, too late for static web assets): a browser project that does not use the sources can set
+       <EssentieablesHost>None</EssentieablesHost>. -->
   <Target Name="_EssentieablesCopyBlazorAssets" BeforeTargets="BeforeBuild"
-          Condition="'$(_EssentieablesBlazor)' == 'true' and Exists('$(MSBuildProjectDirectory)\wwwroot')">
-    <Copy SourceFiles="$(_EssentieablesSources)Blazor\BlazorEssentials.js"
+          Condition="('$(_EssentieablesBlazor)' == 'true' or ('$(_EssentieablesIsBrowser)' == 'true' and '$(EssentieablesHost)' != 'None')) and Exists('$(MSBuildProjectDirectory)\wwwroot')">
+    <ItemGroup>
+      <_EssentieablesBrowserAsset Include="$(_EssentieablesSources)Blazor\BlazorEssentials.js" />
+      <_EssentieablesBrowserAsset Include="$(_EssentieablesSources)Blazor\EssentieablesInterop.js;$(_EssentieablesSources)Blazor\dotnet-js-interop.js"
+                                  Condition="'$(_EssentieablesBlazor)' != 'true'" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_EssentieablesBrowserAsset)"
           DestinationFolder="$(MSBuildProjectDirectory)\wwwroot\"
           SkipUnchangedFiles="true" />
-    <!-- wwwroot/ is globbed at evaluation: on the first build the copied file is not a Content item yet,
-         so it would only be served from the second build on. -->
+    <!-- wwwroot/ is globbed at evaluation: on the first build the copied files are not Content items yet,
+         so they would only be served from the second build on. -->
     <ItemGroup>
-      <Content Remove="wwwroot\BlazorEssentials.js" />
-      <Content Include="wwwroot\BlazorEssentials.js" />
+      <Content Remove="@(_EssentieablesBrowserAsset->'wwwroot\%(Filename)%(Extension)')" />
+      <Content Include="@(_EssentieablesBrowserAsset->'wwwroot\%(Filename)%(Extension)')" />
     </ItemGroup>
   </Target>
 </Project>

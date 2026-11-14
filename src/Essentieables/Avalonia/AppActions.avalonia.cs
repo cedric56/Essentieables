@@ -97,32 +97,22 @@ static partial class OriginalAppActionsExtensions
         if (!string.IsNullOrEmpty(action.Subtitle))
             item.Description = action.Subtitle;
 
-        //if (!string.IsNullOrEmpty(action.Icon))
-        //{
-
-
-        //             try
-        //	{
-        //		//ApplicationDataManager.CreateForPackageFamily("local");
-
-
-        //                 var cleanPath = action.Icon.TrimStart('/', '\\');
-        //                 var sourcePath = Path.Combine(AppContext.BaseDirectory, cleanPath);
-        //		var appDataDir = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);// ApplicationData.Current.LocalFolder;
-        //		var fileName = Path.GetFileName(cleanPath);
-        //		var destPath = Path.Combine(appDataDir, fileName);
-        //		if (!File.Exists(destPath) || File.GetLastWriteTime(sourcePath) > File.GetLastWriteTime(destPath))
-        //		{
-        //			File.Copy(sourcePath, destPath, true);
-        //		}
-
-        //                 item.Logo = new Uri($"file:///{destPath}");// new Uri($"ms-appx:///{action.Icon.TrimStart('/', '\\')}");
-        //             }
-        //	catch
-        //	{
-
-        //             }
-        //}
+        if (!string.IsNullOrEmpty(action.Icon))
+        {
+            // As in MAUI and Avae.Windows.Essentials: a file of the app package ("Assets/edit" or "Assets/edit.png").
+            // Jump lists need package identity, so ms-appx:/// always applies when they work at all.
+            try
+            {
+                var icon = action.Icon.Replace('\\', '/').TrimStart('/');
+                if (string.IsNullOrEmpty(System.IO.Path.GetExtension(icon)))
+                    icon += iconExtension;
+                item.Logo = new Uri($"ms-appx:///{iconDirectory}{icon}");
+            }
+            catch (Exception ex) when (ex is UriFormatException or ArgumentException or System.Runtime.InteropServices.COMException)
+            {
+                System.Diagnostics.Debug.WriteLine(ex);
+            }
+        }
 
         return item;
     }
