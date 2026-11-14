@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Window = Avalonia.Controls.Window;
 using Microsoft.Maui.ApplicationModel;
 using System;
 using System.Threading;

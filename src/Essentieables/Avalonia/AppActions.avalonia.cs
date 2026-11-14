@@ -97,13 +97,15 @@ static partial class OriginalAppActionsExtensions
         if (!string.IsNullOrEmpty(action.Subtitle))
             item.Description = action.Subtitle;
 
-        if (!string.IsNullOrEmpty(action.Icon))
+        // AppAction.Icon is not in every build of MAUI (the Windows one lacks it): read it by name.
+        var actionIcon = typeof(AppAction).GetProperty("Icon")?.GetValue(action) as string;
+        if (!string.IsNullOrEmpty(actionIcon))
         {
             // As in MAUI and Avae.Windows.Essentials: a file of the app package ("Assets/edit" or "Assets/edit.png").
             // Jump lists need package identity, so ms-appx:/// always applies when they work at all.
             try
             {
-                var icon = action.Icon.Replace('\\', '/').TrimStart('/');
+                var icon = actionIcon.Replace('\\', '/').TrimStart('/');
                 if (string.IsNullOrEmpty(System.IO.Path.GetExtension(icon)))
                     icon += iconExtension;
                 item.Logo = new Uri($"ms-appx:///{iconDirectory}{icon}");

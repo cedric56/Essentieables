@@ -163,10 +163,10 @@ internal sealed partial class AvaloniaBrowserJSRuntime : JSRuntime
     // ───────────────────────── [JSImport] ─────────────────────────
 
     [JSImport("attach", ModuleName)]
-    static partial void Attach([JSMarshalAs<JSType.Function<JSType.String>>] Action<string> onMessage);
+    private static partial void Attach([JSMarshalAs<JSType.Function<JSType.String>>] Action<string> onMessage);
 
     [JSImport("beginInvokeJS", ModuleName)]
-    static partial void BeginInvokeJSCore(
+    private static partial void BeginInvokeJSCore(
         [JSMarshalAs<JSType.Number>] long asyncHandle,
         string identifier,
         string argsJson,
@@ -175,20 +175,20 @@ internal sealed partial class AvaloniaBrowserJSRuntime : JSRuntime
         int callType);
 
     [JSImport("endInvokeDotNet", ModuleName)]
-    static partial void EndInvokeDotNetCore(string? callId, bool success, string resultOrError);
+    private static partial void EndInvokeDotNetCore(string? callId, bool success, string resultOrError);
 
     [JSImport("receiveByteArray", ModuleName)]
-    static partial void ReceiveByteArrayCore(int id, [JSMarshalAs<JSType.Array<JSType.Number>>] byte[] data);
+    private static partial void ReceiveByteArrayCore(int id, [JSMarshalAs<JSType.Array<JSType.Number>>] byte[] data);
 
     [JSImport("supplyDotNetStream", ModuleName)]
-    static partial void SupplyDotNetStreamCore(
+    private static partial void SupplyDotNetStreamCore(
         [JSMarshalAs<JSType.Number>] long streamId,
         [JSMarshalAs<JSType.Array<JSType.Number>>] byte[] data,
         string? error);
 
     [JSImport("takeStagedChunk", ModuleName)]
     [return: JSMarshalAs<JSType.Array<JSType.Number>>]
-    static partial byte[] TakeStagedChunk(int token);
+    private static partial byte[] TakeStagedChunk(int token);
 
     /// <summary>
     /// The content of an <see cref="IJSStreamReference"/>, read by chunks: <c>essentieablesInterop.stageChunk</c> receives the
@@ -275,10 +275,10 @@ internal static partial class JSInterop
     public static void Open(string url, string target = "_blank") => OpenCore(url, target);
 
     [JSImport("open", AvaloniaBrowserJSRuntime.ModuleName)]
-    static partial void OpenCore(string url, string target);
+    private static partial void OpenCore(string url, string target);
 
     [JSImport("evaluate", AvaloniaBrowserJSRuntime.ModuleName)]
-    static partial string? Evaluate(string code);
+    private static partial string? Evaluate(string code);
 }
 
 /// <summary>Synchronous access to localStorage, usable before the JS module is imported.</summary>
@@ -286,16 +286,16 @@ internal static partial class JSInterop
 internal static partial class AvaloniaBrowserStorage
 {
     [JSImport("globalThis.localStorage.key")]
-    static partial string? Key(int index);
+    private static partial string? Key(int index);
 
     [JSImport("globalThis.localStorage.getItem")]
     internal static partial string? GetItem(string key);
 
     [JSImport("globalThis.localStorage.setItem")]
-    static partial void SetItem(string key, string value);
+    private static partial void SetItem(string key, string value);
 
     [JSImport("globalThis.localStorage.removeItem")]
-    static partial void RemoveItem(string key);
+    private static partial void RemoveItem(string key);
 
     // Where the former browser implementation of Essentieables (Avalonia.Controls.Maui.Essentials) kept the preferences.
     const string LegacyPreferencesKey = "__avalonia_maui_preferences";

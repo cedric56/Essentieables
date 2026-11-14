@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Window = Avalonia.Controls.Window;
 using Avalonia.Controls.Maui.Essentials;
 using Avalonia.Media.Imaging;
 using Microsoft.Maui.Media;
