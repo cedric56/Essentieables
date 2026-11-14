@@ -1,4 +1,4 @@
-// Avalonia.Browser only: compiled where ESSENTIEABLES_AVALONIA_BROWSER is defined (an Avalonia app built for the browser,
+﻿// Avalonia.Browser only: compiled where ESSENTIEABLES_AVALONIA_BROWSER is defined (an Avalonia app built for the browser,
 // see build/Essentieables.targets). Blazor hosts compile this file to nothing.
 #if ESSENTIEABLES_AVALONIA_BROWSER
 
@@ -128,9 +128,14 @@ internal sealed partial class AvaloniaBrowserJSRuntime : JSRuntime
 
     protected override void EndInvokeDotNet(DotNetInvocationInfo invocationInfo, in DotNetInvocationResult invocationResult)
     {
+        // The message only: the stack trace of the app has no business in the page (the debugger shows it in DEBUG).
         var resultOrError = invocationResult.Success
             ? invocationResult.ResultJson ?? "null"
+#if DEBUG
             : invocationResult.Exception?.ToString() ?? "The .NET method failed.";
+#else
+            : invocationResult.Exception?.GetBaseException().Message ?? "The .NET method failed.";
+#endif
         EndInvokeDotNetCore(invocationInfo.CallId, invocationResult.Success, resultOrError);
     }
 

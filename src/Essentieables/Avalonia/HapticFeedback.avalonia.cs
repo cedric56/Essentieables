@@ -1,4 +1,4 @@
-// Windows only: compiled where ESSENTIEABLES_WINDOWS is defined (net10.0 and net10.0-windows*, see build/Essentieables.targets),
+﻿// Windows only: compiled where ESSENTIEABLES_WINDOWS is defined (net10.0 and net10.0-windows*, see build/Essentieables.targets),
 // so that Android, iOS, macOS and browser apps need no Windows contract package.
 #if ESSENTIEABLES_WINDOWS
 
@@ -8,6 +8,7 @@ using Microsoft.Maui.Devices;
 using System;
 using System.Diagnostics;
 using System.Runtime.Versioning;
+using System.Threading.Tasks;
 using Windows.Devices.Haptics;
 using Windows.Foundation.Metadata;
 
@@ -20,7 +21,9 @@ partial class OriginalHapticFeedbackImplementation : IHapticFeedback
 
     public bool IsSupported => true;
 
-    public async void Perform(HapticFeedbackType type)
+    public void Perform(HapticFeedbackType type) => _ = PerformAsync(type);
+
+    async Task PerformAsync(HapticFeedbackType type)
     {
         try
         {

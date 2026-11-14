@@ -47,6 +47,8 @@ public class NominatimGeocoding : IGeocoding
     });
 
     static readonly SemaphoreSlim PublicInstanceGate = new(1, 1);
+    // Read and written under s_scheduleLock: PushBackPublicInstance runs outside PublicInstanceGate.
+    static readonly object s_scheduleLock = new();
     static DateTimeOffset s_nextPublicRequest = DateTimeOffset.MinValue;
 
     readonly HttpClient _client;
@@ -117,10 +119,21 @@ public class NominatimGeocoding : IGeocoding
         await PublicInstanceGate.WaitAsync(token).ConfigureAwait(false);
         try
         {
-            var wait = s_nextPublicRequest - DateTimeOffset.UtcNow;
-            if (wait > TimeSpan.Zero)
+            // Waits again if a 429/503 pushed the slot back meanwhile.
+            while (true)
+            {
+                TimeSpan wait;
+                lock (s_scheduleLock)
+                {
+                    wait = s_nextPublicRequest - DateTimeOffset.UtcNow;
+                    if (wait <= TimeSpan.Zero)
+                    {
+                        s_nextPublicRequest = DateTimeOffset.UtcNow + MinimumInterval;
+                        break;
+                    }
+                }
                 await Task.Delay(wait, token).ConfigureAwait(false);
-            s_nextPublicRequest = DateTimeOffset.UtcNow + MinimumInterval;
+            }
         }
         finally
         {
@@ -131,8 +144,11 @@ public class NominatimGeocoding : IGeocoding
     static void PushBackPublicInstance(TimeSpan delay)
     {
         var next = DateTimeOffset.UtcNow + delay;
-        if (next > s_nextPublicRequest)
-            s_nextPublicRequest = next;
+        lock (s_scheduleLock)
+        {
+            if (next > s_nextPublicRequest)
+                s_nextPublicRequest = next;
+        }
     }
 
     /// <summary>Builds the reverse-geocoding URL. Coordinates are always formatted with the invariant culture.</summary>

@@ -1,4 +1,4 @@
-// Windows only: compiled where ESSENTIEABLES_WINDOWS is defined (net10.0 and net10.0-windows*, see build/Essentieables.targets),
+﻿// Windows only: compiled where ESSENTIEABLES_WINDOWS is defined (net10.0 and net10.0-windows*, see build/Essentieables.targets),
 // so that Android, iOS, macOS and browser apps need no Windows contract package.
 #if ESSENTIEABLES_WINDOWS
 
@@ -19,78 +19,76 @@ namespace Essentieables;
 [SupportedOSPlatform("windows10.0.10240")]
 class OriginalFlashlightImplementation : IFlashlight
 {
-    static readonly object locker = new object();
+    // MAUI used Monitor.Enter/Exit around awaits: the lock leaked on the early return and on exceptions, and Exit could
+    // run on another thread (SynchronizationLockException). A SemaphoreSlim can be held across awaits.
+    readonly SemaphoreSlim gate = new(1, 1);
     bool hasLoadedLamp;
     Lamp? lamp;
 
-    async Task FindLampAsync()
+    async Task<Lamp?> GetLampAsync()
     {
-        // fail fast
-        if (hasLoadedLamp)
-            return;
-
-        Monitor.Enter(locker);
-
-        // we may have loaded it while this was waiting to enter
-        if (hasLoadedLamp)
-            return;
-
-        // find all the lamps
-        var selector = Lamp.GetDeviceSelector();
-        var allLamps = await DeviceInformation.FindAllAsync(selector);
-
-        // find all the back lamps
-        var lampInfo = allLamps.FirstOrDefault(di => di.EnclosureLocation?.Panel == Panel.Back);
-
-        if (lampInfo is not null)
+        await gate.WaitAsync().ConfigureAwait(false);
+        try
         {
-            // get the lamp
-            lamp = await Lamp.FromIdAsync(lampInfo.Id);
-        }
-        else
-        {
+            if (hasLoadedLamp)
+                return lamp;
+
+            // find all the lamps, preferably a back one
+            var selector = Lamp.GetDeviceSelector();
+            var allLamps = await DeviceInformation.FindAllAsync(selector);
+            var lampInfo = allLamps.FirstOrDefault(di => di.EnclosureLocation?.Panel == Panel.Back);
+
             // if there is no back lamp, use the default lamp
-            lamp = await Lamp.GetDefaultAsync();
-        }
+            lamp = lampInfo is not null
+                ? await Lamp.FromIdAsync(lampInfo.Id)
+                : await Lamp.GetDefaultAsync();
 
+            hasLoadedLamp = true;
+            return lamp;
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    // Called with the gate held.
+    async Task<Lamp?> ReloadLampAsync()
+    {
+        lamp = await Lamp.GetDefaultAsync();
         hasLoadedLamp = true;
-        Monitor.Exit(locker);
+        return lamp;
     }
 
     /// <summary>
     /// Checks if the flashlight is available and can be turned on or off.
     /// </summary>
     /// <returns><see langword="true"/> when the flashlight is available, or <see langword="false"/> when not</returns>
-    public async Task<bool> IsSupportedAsync()
-    {
-        await FindLampAsync();
-
-        lock (locker)
-        {
-            return hasLoadedLamp && lamp is not null;
-        }
-    }
+    public async Task<bool> IsSupportedAsync() => await GetLampAsync().ConfigureAwait(false) is not null;
 
     public async Task TurnOnAsync()
     {
-        await FindLampAsync();
-
-        if (lamp == null)
+        if (await GetLampAsync().ConfigureAwait(false) is null)
             throw new FeatureNotSupportedException();
 
-        lock (locker)
+        await gate.WaitAsync().ConfigureAwait(false);
+        try
         {
-            if (lamp is not null)
-            {
-                lamp.BrightnessLevel = 1.0f;
-                lamp.IsEnabled = true;
-            }
+            // TurnOffAsync may have released it meanwhile.
+            var current = lamp ?? await ReloadLampAsync().ConfigureAwait(false) ?? throw new FeatureNotSupportedException();
+            current.BrightnessLevel = 1.0f;
+            current.IsEnabled = true;
+        }
+        finally
+        {
+            gate.Release();
         }
     }
 
-    public Task TurnOffAsync()
+    public async Task TurnOffAsync()
     {
-        lock (locker)
+        await gate.WaitAsync().ConfigureAwait(false);
+        try
         {
             if (lamp is not null)
             {
@@ -100,8 +98,10 @@ class OriginalFlashlightImplementation : IFlashlight
                 hasLoadedLamp = false;
             }
         }
-
-        return Task.CompletedTask;
+        finally
+        {
+            gate.Release();
+        }
     }
 }
 #endif

@@ -47,6 +47,11 @@ internal class BlazorWebAuthenticator : IWebAuthenticator
         var authenticationUrl = options.Url;
         var callbackUrl = options.CallbackUrl;
 
+        // The token only abandons the .NET side of the JS call: close the popup and stop its timers too.
+        var module = BlazorEssentials.Module;
+        using var cancellation = cancellationToken.Register(() =>
+            BlazorEssentials.Forget(module.InvokeVoidAsync("authenticateCancel").AsTask(), "WebAuthenticator cancel"));
+
         string? callbackUri;
         if (UseStartEndpoint)
         {

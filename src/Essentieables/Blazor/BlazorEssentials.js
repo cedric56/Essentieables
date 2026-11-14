@@ -1748,6 +1748,15 @@ export function pickFiles(title, accept, multiple) {
 		input.addEventListener("change", () => finish(Array.from(input.files ?? [])));
 		// Fired when the dialog is closed without a selection (Chrome 113+, Firefox 91+, Safari 16.4+).
 		input.addEventListener("cancel", () => finish([]));
+		if (!("oncancel" in input)) {
+			// Older browsers: the page gets the focus back when the dialog closes; without a "change" shortly after,
+			// the dialog was canceled (otherwise the promise would never settle).
+			const onFocus = () => {
+				window.removeEventListener("focus", onFocus);
+				setTimeout(() => { if (!input.files?.length) finish([]); }, 1000);
+			};
+			setTimeout(() => window.addEventListener("focus", onFocus), 0);
+		}
 
 		// Some browsers require the input to be in the DOM to show the dialog reliably.
 		document.body.appendChild(input);
@@ -1775,6 +1784,12 @@ export function releasePickedFiles(token) {
 
 // ---------- WebAuthenticator ----------
 
+/** Cancels the authentication in progress (CancellationToken of AuthenticateAsync): closes its popup and rejects. */
+let cancelAuthentication = null;
+export function authenticateCancel() {
+	cancelAuthentication?.();
+}
+
 export function authenticate(url) {
 		return new Promise((resolve, reject) => {
 			const popup = window.open(
@@ -1800,9 +1815,15 @@ export function authenticate(url) {
 				if (finished) return;
 				finished = true;
 				cleanup();
+				cancelAuthentication = null;
 
 				if (error) reject(error);
 				else resolve(callbackUrl ?? null);
+			};
+
+			cancelAuthentication = () => {
+				try { popup.close(); } catch { }
+				finish(new Error("Authentication canceled."));
 			};
 
 			const onMessage = (event) => {
@@ -1823,10 +1844,11 @@ export function authenticate(url) {
 					finish(new Error("Authentication window closed."));
 			}, 500);
 
+			// 5 minutes: enough for a two-factor sign-in.
 			const timeout = setTimeout(() => {
 				try { popup.close(); } catch { }
 				finish(new Error("Authentication timed out."));
-			}, 120000);
+			}, 300000);
 
 			// Open the authentication URL only after installing listeners.
 			popup.location.href = url;
@@ -1874,6 +1896,7 @@ export function authenticateDirect(url, callbackUrl) {
 		const finish = (error, result) => {
 			if (finished) return;
 			finished = true;
+			cancelAuthentication = null;
 			window.removeEventListener("message", onMessage);
 			clearInterval(poll);
 			clearTimeout(timeout);
@@ -1910,6 +1933,7 @@ export function authenticateDirect(url, callbackUrl) {
 		}, 250);
 
 		const timeout = setTimeout(() => finish(new Error("Authentication timed out.")), 300000);
+		cancelAuthentication = () => finish(new Error("Authentication canceled."));
 	});
 }
 

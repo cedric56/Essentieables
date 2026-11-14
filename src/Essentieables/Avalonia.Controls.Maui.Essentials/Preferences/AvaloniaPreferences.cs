@@ -1,4 +1,4 @@
-
+﻿
 
 using Microsoft.Maui.Storage;
 using System;
@@ -180,9 +180,11 @@ public partial class AvaloniaPreferences : IPreferences
 
                     try
                     {
-                        return (T)Convert.ChangeType(value, typeof(T), CultureInfo.InvariantCulture);
+                        // Get<int?> & co: convert to the underlying type.
+                        var type = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
+                        return (T)Convert.ChangeType(value, type, CultureInfo.InvariantCulture);
                     }
-                    catch (FormatException)
+                    catch (Exception ex) when (ex is FormatException or InvalidCastException or OverflowException)
                     {
                         // bad get, fall back to default
                     }

@@ -1,6 +1,8 @@
 ﻿
 
+using System;
 using System.Collections.Generic;
+using System.Globalization;
 
 namespace Essentieables;
 
@@ -9,7 +11,7 @@ public static class CountryResolver
     /// <summary>
     /// Maps BCP-47 locale codes (e.g. "en-US") to their associated country/region display name.
     /// </summary>
-    private static Dictionary<string, string> localeToCountry = new()
+    private static readonly Dictionary<string, string> localeToCountry = new(StringComparer.OrdinalIgnoreCase)
 {
     { "af-ZA", "South Africa" },
     { "am-ET", "Ethiopia" },
@@ -169,11 +171,42 @@ public static class CountryResolver
     /// <summary>
     /// Looks up the display name of the country/region associated with the specified locale code.
     /// </summary>
-    /// <param name="language">The BCP-47 locale code (e.g. "en-US"). Defaults to "en" if <see langword="null"/>.</param>
+    /// <param name="language">
+    /// The BCP-47 locale code ("en-US", case-insensitive, "_" accepted). A language without region ("fr") resolves to its
+    /// main country ("fr-FR"). Null or empty: the current culture.
+    /// </param>
     /// <returns>The associated country/region name, or <see langword="null"/> if the locale is not recognized.</returns>
     public static string? Resolve(string? language)
     {
-        localeToCountry.TryGetValue(language ?? "en", out var country);
-        return country;
+        language = string.IsNullOrWhiteSpace(language)
+            ? CultureInfo.CurrentCulture.Name
+            : language.Trim().Replace('_', '-');
+        if (language.Length == 0)
+            return null;
+
+        if (localeToCountry.TryGetValue(language, out var country))
+            return country;
+
+        // "fr" → "fr-FR" from the culture data (absent in invariant globalization mode), then "xx-XX".
+        try
+        {
+            var specific = CultureInfo.CreateSpecificCulture(language).Name;
+            if (localeToCountry.TryGetValue(specific, out country))
+                return country;
+        }
+        catch (CultureNotFoundException)
+        {
+        }
+
+        var neutral = language.Split('-')[0];
+        if (localeToCountry.TryGetValue($"{neutral}-{neutral.ToUpperInvariant()}", out country))
+            return country;
+
+        foreach (var (locale, name) in localeToCountry)
+        {
+            if (locale.StartsWith(neutral + "-", StringComparison.OrdinalIgnoreCase))
+                return name;
+        }
+        return null;
     }
 }

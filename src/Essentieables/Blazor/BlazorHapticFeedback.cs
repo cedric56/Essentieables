@@ -41,24 +41,12 @@ internal class BlazorHapticFeedback : IHapticFeedback
         }
     }
 
-    public async void Perform(HapticFeedbackType type = HapticFeedbackType.Click)
+    public void Perform(HapticFeedbackType type = HapticFeedbackType.Click)
     {
-        try
-        { 
-            if (!IsSupported)
-                throw new FeatureNotSupportedException("The Vibration API is not available in this browser.");
-            await BlazorEssentials.Module.InvokeVoidAsync("vibrate", type == HapticFeedbackType.LongPress ? 25 : 10);
-        }
-#if DEBUG
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine(ex);
-        }
-#else
-        catch
-        {
-
-        }
-#endif
+        if (!IsSupported)
+            throw new FeatureNotSupportedException("The Vibration API is not available in this browser.");
+        BlazorEssentials.Forget(
+            BlazorEssentials.Module.InvokeVoidAsync("vibrate", type == HapticFeedbackType.LongPress ? 25 : 10).AsTask(),
+            "HapticFeedback.Perform");
     }
 }

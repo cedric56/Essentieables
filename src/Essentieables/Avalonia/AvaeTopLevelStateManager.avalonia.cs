@@ -67,7 +67,6 @@ internal class AvaeTopLevelStateManager : IAvaloniaEssentialsPlatformProvider
     /// <summary>
     /// Gets the application's currently active window's pointer.
     /// </summary>
-    /// <param name="manager">The object to invoke this method on.</param>
     /// <param name="throwOnNull">Throws an exception if no current <see cref="Window"/> can be found and this value is set to <see langword="true"/>, otherwise this method returns <see cref="IntPtr.Zero"/>.</param>
     /// <returns>The application's currently active window's <see cref="IntPtr"/>.</returns>
     /// <exception cref="NullReferenceException">Thrown if no current <see cref="Window"/> can be found and <paramref name="throwOnNull"/> is set to <see langword="true"/>.</exception>

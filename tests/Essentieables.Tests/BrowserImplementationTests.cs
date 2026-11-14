@@ -160,3 +160,38 @@ public class BlazorBrowserStorageTests
         Assert.False(preferences.IsLoaded);
     }
 }
+
+/// <summary>The fixes of the audit on the browser implementations.</summary>
+public class BlazorAuditFixesTests
+{
+    [Fact]
+    public void A_sensor_that_is_not_available_throws_to_the_caller_of_Start()
+    {
+        // Before InitializeAsync (or without the sensor), MAUI code catches FeatureNotSupportedException around Start:
+        // it must be thrown synchronously, not lost in an async void.
+        var accelerometer = new BlazorAccelerometer();
+
+        Assert.Throws<Microsoft.Maui.ApplicationModel.FeatureNotSupportedException>(
+            () => accelerometer.Start(Microsoft.Maui.Devices.Sensors.SensorSpeed.Default));
+        Assert.False(accelerometer.IsMonitoring);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("  ")]
+    public void An_empty_phone_number_throws_to_the_caller(string number)
+    {
+        Assert.ThrowsAny<ArgumentException>(() => new BlazorPhoneDialer().Open(number));
+    }
+
+    [Fact]
+    public void Shared_names_with_a_colon_do_not_collide_with_keys_containing_one()
+    {
+        Assert.NotEqual(
+            BlazorPreferences.GetStorageKey("b:c", "a"),
+            BlazorPreferences.GetStorageKey("c", "a:b"));
+        // Existing names are unchanged.
+        Assert.Equal("maui:prefs:settings:theme", BlazorPreferences.GetStorageKey("theme", "settings"));
+        Assert.Equal("maui:prefs:_default:theme", BlazorPreferences.GetStorageKey("theme", null));
+    }
+}

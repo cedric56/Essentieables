@@ -92,7 +92,10 @@ internal sealed class BlazorPreferences : IPreferences
     }
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new();
 
-    private static string GetContainer(string? sharedName) => KeyPrefix + (sharedName ?? "_default") + ":";
+    // ':' separates the container from the key: escaped in the shared name, so ("a", "b:c") and ("a:b", "c") are two keys
+    // and Clear("a") leaves "a:b" alone. Names without '%' or ':' (all the existing ones in practice) are unchanged.
+    private static string GetContainer(string? sharedName)
+        => KeyPrefix + (sharedName is null ? "_default" : sharedName.Replace("%", "%25").Replace(":", "%3A")) + ":";
     internal static string GetStorageKey(string key, string? sharedName) => GetContainer(sharedName) + key;
 
     private SemaphoreSlim GetLock(string storageKey)

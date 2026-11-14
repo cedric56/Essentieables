@@ -1,4 +1,4 @@
-// Windows only: compiled where ESSENTIEABLES_WINDOWS is defined (net10.0 and net10.0-windows*, see build/Essentieables.targets),
+﻿// Windows only: compiled where ESSENTIEABLES_WINDOWS is defined (net10.0 and net10.0-windows*, see build/Essentieables.targets),
 // so that Android, iOS, macOS and browser apps need no Windows contract package.
 #if ESSENTIEABLES_WINDOWS
 
@@ -20,11 +20,21 @@ namespace Essentieables;
 /// <c>UseMauiEssentials()</c> of Avae.Windows.Essentials did:
 /// <list type="bullet">
 /// <item>the jump list starts the executable with the <c>XE_APP_ACTIONS-…</c> argument;</item>
-/// <item>when an instance of the app is already running, the new process passes the argument to it (WM_COPYDATA to its main
-/// window) and exits, so the running instance handles the action;</item>
-/// <item>otherwise the action is raised once the first window is open, after the app subscribed to the event.</item>
+/// <item>the action is raised once the first window is open, after the app subscribed to the event;</item>
+/// <item>single instance, opt-in: <see cref="TryForwardToRunningInstance"/>, called by the app in <c>Main</c>, passes the action
+/// to a running instance of the same executable (WM_COPYDATA to its main window), which raises it; the app then returns.</item>
 /// </list>
 /// </summary>
+/// <example>
+/// <code>
+/// public static void Main(string[] args)
+/// {
+///     if (AvaeAppActionsActivation.TryForwardToRunningInstance())
+///         return; // the running instance handles the jump list action
+///     BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+/// }
+/// </code>
+/// </example>
 [SupportedOSPlatform("windows10.0.10586")]
 static class AvaeAppActionsActivation
 {
@@ -37,10 +47,7 @@ static class AvaeAppActionsActivation
     static string? s_pendingArgument;
     static bool s_initialized;
 
-    /// <summary>
-    /// Single instance and activation handling. Called by <c>UseEssentieables()</c>; set
-    /// <see cref="ForwardToRunningInstance"/> to false before it to let every launch start its own instance.
-    /// </summary>
+    /// <summary>Activation handling. Called by <c>UseEssentieables()</c>; never ends the process.</summary>
     internal static void Initialize(OriginalAppActionsImplementation appActions)
     {
         s_appActions = appActions;
@@ -48,26 +55,25 @@ static class AvaeAppActionsActivation
             return;
         s_initialized = true;
 
-        var argument = Environment.GetCommandLineArgs()
-            .FirstOrDefault(a => a.StartsWith(OriginalAppActionsExtensions.AppActionPrefix, StringComparison.Ordinal));
-
-        if (argument is not null && ForwardToRunningInstance && TrySendToRunningInstance(argument))
-        {
-            // The running instance handles the action: this one has nothing left to do.
-            Environment.Exit(0);
-            return;
-        }
-
-        s_pendingArgument = argument;
+        s_pendingArgument = GetLaunchArgument();
 
         // Every window can receive the argument: the sender targets Process.MainWindowHandle, the first visible top-level window.
         Window.WindowOpenedEvent.AddClassHandler(typeof(Window), (sender, _) => OnWindowOpened((Window)sender!));
     }
 
+    static string? GetLaunchArgument() => Environment.GetCommandLineArgs()
+        .FirstOrDefault(a => a.StartsWith(OriginalAppActionsExtensions.AppActionPrefix, StringComparison.Ordinal));
+
     /// <summary>
-    /// True (default): a launch from the jump list while the app runs hands the action to the running instance and exits.
+    /// When the app was launched from a jump list item and another instance of the same executable runs, hands the action to it
+    /// and returns true: the caller (<c>Main</c>) should then exit. Returns false otherwise, and always when the app runs
+    /// through the <c>dotnet</c> host (<c>dotnet app.dll</c>), where other apps share the process name and path.
     /// </summary>
-    public static bool ForwardToRunningInstance { get; set; } = true;
+    public static bool TryForwardToRunningInstance()
+    {
+        var argument = GetLaunchArgument();
+        return argument is not null && TrySendToRunningInstance(argument);
+    }
 
     static void OnWindowOpened(Window window)
     {
@@ -131,6 +137,12 @@ static class AvaeAppActionsActivation
 
     static bool TrySendToRunningInstance(string argument)
     {
+        // The instance is identified by its executable: under the dotnet host, every app is "dotnet.exe".
+        var executable = Environment.ProcessPath;
+        if (string.IsNullOrEmpty(executable)
+            || string.Equals(System.IO.Path.GetFileNameWithoutExtension(executable), "dotnet", StringComparison.OrdinalIgnoreCase))
+            return false;
+
         using var current = Process.GetCurrentProcess();
         Process[] processes;
         try
@@ -152,11 +164,15 @@ static class AvaeAppActionsActivation
                 IntPtr window;
                 try
                 {
+                    // Same name is not enough: another app may use it. Same executable file is.
+                    var path = process.MainModule?.FileName;
+                    if (!string.Equals(path, executable, StringComparison.OrdinalIgnoreCase))
+                        continue;
                     window = process.MainWindowHandle;
                 }
-                catch (InvalidOperationException)
+                catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
                 {
-                    continue; // exited meanwhile
+                    continue; // exited meanwhile, or not accessible (other user, elevated)
                 }
 
                 if (window != IntPtr.Zero && Send(window, argument))

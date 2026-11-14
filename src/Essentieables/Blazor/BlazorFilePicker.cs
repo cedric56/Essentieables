@@ -29,6 +29,12 @@ internal sealed class BlazorFilePicker : IFilePicker
     /// <summary>Largest file accepted, in bytes (100 MB by default). Larger files throw <see cref="IOException"/>.</summary>
     public static long MaxFileSize { get; set; } = 100L * 1024 * 1024;
 
+    /// <summary>
+    /// Largest total of one pick (several files), in bytes (200 MB by default), so a multiple pick cannot fill the server's
+    /// disk on Blazor Server. Larger picks throw <see cref="IOException"/> before anything is copied.
+    /// </summary>
+    public static long MaxTotalSize { get; set; } = 200L * 1024 * 1024;
+
     internal sealed record PickedFile(string Name, string? Type, long Size);
     internal sealed record PickResult(int Token, PickedFile[] Files);
 
@@ -113,6 +119,18 @@ internal sealed class BlazorFilePicker : IFilePicker
         var results = new List<FileResult>(picked.Files.Length);
         try
         {
+            // Checked before copying anything: the sizes come from the browser, the copy itself is still capped per file.
+            var total = 0L;
+            foreach (var file in picked.Files)
+            {
+                if (file.Size > MaxFileSize)
+                    throw new IOException(
+                        $"'{file.Name}' is {file.Size} bytes, more than BlazorFilePicker.MaxFileSize ({MaxFileSize} bytes).");
+                total += file.Size;
+            }
+            if (total > MaxTotalSize)
+                throw new IOException($"The files picked total {total} bytes, more than BlazorFilePicker.MaxTotalSize ({MaxTotalSize} bytes).");
+
             Directory.CreateDirectory(directory);
             for (var i = 0; i < picked.Files.Length; i++)
             {

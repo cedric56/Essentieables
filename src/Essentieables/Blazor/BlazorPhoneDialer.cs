@@ -12,10 +12,11 @@ internal class BlazorPhoneDialer: IPhoneDialer
 {
     public bool IsSupported => true;
 
-    public async void Open(string number)
+    public void Open(string number)
     {
+        // Validated synchronously: the exceptions reach the caller, as with MAUI.
         ArgumentException.ThrowIfNullOrWhiteSpace(number);
         BlazorEssentials.EnsureInitialized();
-        await BlazorLauncher.NavigateToAsync("tel:" + Uri.EscapeDataString(number));
+        BlazorEssentials.Forget(BlazorLauncher.NavigateToAsync("tel:" + Uri.EscapeDataString(number)), "PhoneDialer.Open");
     }
 }

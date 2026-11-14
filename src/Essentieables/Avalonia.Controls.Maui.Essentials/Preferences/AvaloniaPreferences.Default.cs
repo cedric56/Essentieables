@@ -1,4 +1,4 @@
-
+﻿
 
 using System;
 using System.IO;
@@ -18,8 +18,9 @@ public partial class AvaloniaPreferences
 
         try
         {
-            using var stream = File.OpenRead(AppPreferencesPath);
-            var readPreferences = JsonSerializer.Deserialize(stream, AvaloniaPreferencesJsonSerializerContext.Default.PreferencesDictionary);
+            System.Collections.Concurrent.ConcurrentDictionary<string, System.Collections.Concurrent.ConcurrentDictionary<string, string>>? readPreferences;
+            using (var stream = File.OpenRead(AppPreferencesPath))
+                readPreferences = JsonSerializer.Deserialize(stream, AvaloniaPreferencesJsonSerializerContext.Default.PreferencesDictionary);
 
             if (readPreferences != null)
             {
@@ -28,20 +29,22 @@ public partial class AvaloniaPreferences
                     _preferences.TryAdd(pair.Key, pair.Value);
             }
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
-            // if deserialization fails proceed with empty settings
+            // Proceed with empty settings, but keep the unreadable file instead of overwriting it at the next save.
+            Essentieables.AtomicFile.SetAside(AppPreferencesPath, ex);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine($"Essentieables: preferences could not be read: {ex.Message}");
         }
     }
 
     partial void SavePreferences()
     {
-        var dir = Path.GetDirectoryName(AppPreferencesPath);
-        if (dir != null)
-            Directory.CreateDirectory(dir);
-
-        using var stream = File.Create(AppPreferencesPath);
-        JsonSerializer.Serialize(stream, _preferences, AvaloniaPreferencesJsonSerializerContext.Default.PreferencesDictionary);
+        // Through a temporary file: a crash while writing never truncates the preferences.
+        Essentieables.AtomicFile.Write(AppPreferencesPath, stream =>
+            JsonSerializer.Serialize(stream, _preferences, AvaloniaPreferencesJsonSerializerContext.Default.PreferencesDictionary));
     }
 
     static string GetPreferencesPath()

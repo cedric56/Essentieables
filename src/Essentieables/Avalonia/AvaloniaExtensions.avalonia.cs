@@ -27,11 +27,10 @@ internal static class AvaloniaExtensions
     /// Initializes Essentieables for an Avalonia application builder.
     /// </summary>
     /// <remarks>
-    /// This overload creates a new service collection and registers the
-    /// services in it. The collection is not attached to the application's
-    /// dependency injection container by this method.
-    /// Use the <see cref="UseAvaeEssentials(IServiceCollection)"/> overload
-    /// when registering services in the application's existing service collection.
+    /// Avalonia has no service container of its own: this overload installs the implementations behind the static MAUI
+    /// facades (<c>Preferences.Default</c>…) and registers them in a collection of its own, which nothing reads afterwards.
+    /// When the app has a container, call <see cref="UseEssentieables(IServiceCollection)"/> on its collection instead, so
+    /// <c>IPreferences</c> & co can be injected.
     /// </remarks>
     /// <param name="builder">The Avalonia application builder.</param>
     /// <returns>The original builder, allowing method chaining.</returns>
@@ -77,62 +76,59 @@ internal static class AvaloniaExtensions
         // Windows: use the Windows-specific .NET MAUI implementations where
         // supported by the current Windows version, with Avae replacements
         // for selected services.
-        if (OperatingSystem.IsWindows())
+        // .NET 10 runs on Windows 10 1607 and later, and the Windows App SDK projections need 1809 (17763): one guard for the
+        // whole branch replaces a version check per service (the platform analyzer sees it).
+        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17763, 0))
         {
-            // The jump list: AppActionActivated is raised for the action the app was launched with, and a launch while the app
-            // runs is handed to the running instance (as UseMauiEssentials() of Avae.Windows.Essentials did).
-            var appActions = OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10586, 0) ? new OriginalAppActionsImplementation() : null;
-            if (appActions is not null && OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10586, 0))
-                AvaeAppActionsActivation.Initialize(appActions);
+            // The jump list: AppActionActivated is raised for the action the app was launched with (single instance is opt-in:
+            // AvaeAppActionsActivation.TryForwardToRunningInstance() in Main).
+            var appActions = new OriginalAppActionsImplementation();
+            AvaeAppActionsActivation.Initialize(appActions);
 
             // The MAUI locations (%LOCALAPPDATA%\<Publisher>\<Package>, ApplicationData when packaged), so the files and preferences of
             // apps migrated from Avae.Windows.Essentials are found again. Package files missing on disk are read from avares://.
-            IFileSystem windowsFileSystem = OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0)
-                ? new OriginalFileSystemImplementation(fileSystem)
-                : fileSystem;
-            IPreferences windowsPreferences = OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0)
-                ? new OriginalPreferencesImplementation(windowsFileSystem)
-                : preferences;
+            IFileSystem windowsFileSystem = new OriginalFileSystemImplementation(fileSystem);
+            IPreferences windowsPreferences = new OriginalPreferencesImplementation(windowsFileSystem);
 
             services.SetDefaults(
-                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalAccelerometerImplementation() : null!,
-                appActions!,
-                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new AvaeAppInfo(platformProvider) : null!,
-                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalBarometerImplementation() : null!,
-                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalBatteryImplementation() : null!,
-                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalBrowserImplementation() : null!,
-                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalClipboardImplementation() : null!,
-                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalCompassImplementation() : null!,
-                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalConnectivityImplementation() : null!,
-                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalContactsImplementation(platformProvider) : null!,
-                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new AvaeDeviceDisplay(platformProvider) : null!,
-                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalDeviceInfoImplementation() : null!,
+                new OriginalAccelerometerImplementation(),
+                appActions,
+                new AvaeAppInfo(platformProvider),
+                new OriginalBarometerImplementation(),
+                new OriginalBatteryImplementation(),
+                new OriginalBrowserImplementation(),
+                new OriginalClipboardImplementation(),
+                new OriginalCompassImplementation(),
+                new OriginalConnectivityImplementation(),
+                new OriginalContactsImplementation(platformProvider),
+                new AvaeDeviceDisplay(platformProvider),
+                new OriginalDeviceInfoImplementation(),
                 new Essentieables.AvaeEmail(),
                 filepicker,
                 windowsFileSystem,
-                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalFlashlightImplementation() : null!,
+                new OriginalFlashlightImplementation(),
 #if WINDOWS
-                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17763, 0) ? Microsoft.Maui.Devices.Sensors.Geocoding.Default : null!,
+                Microsoft.Maui.Devices.Sensors.Geocoding.Default,
 #else
                 new AvaeGeocoding(),
 #endif
-                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 14393, 0) ? new AvaeGeolocation() : null!,
-                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalGyroscopeImplementation() : null!,
+                new AvaeGeolocation(),
+                new OriginalGyroscopeImplementation(),
                 OperatingSystem.IsWindowsVersionAtLeast(10, 0, 15063, 0) ? new OriginalHapticFeedbackImplementation() : hapticFeedback,
-                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalLauncherImplementation() : null!,
-                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalMagnetometerImplementation() : null!,
-                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalMapImplementation() : null!,
-                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new AvaeMediaPicker(platformProvider, mediapicker) : null!,
-                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalOrientationSensorImplementation() : null!,
+                new OriginalLauncherImplementation(),
+                new OriginalMagnetometerImplementation(),
+                new OriginalMapImplementation(),
+                new AvaeMediaPicker(platformProvider, mediapicker),
+                new OriginalOrientationSensorImplementation(),
                 new AvaePhoneDialer(),
                 windowsPreferences,
                 screenshot,
-                () => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalSecureStorageImplementation() : null!,
-                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new AvaeSemanticScreenReader(platformProvider) : null!,
-                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalShareImplementation(platformProvider) : null!,
-                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalSmsImplementation() : null!,
-                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalTextToSpeechImplementation() : null!,
-                OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240, 0) ? new OriginalVibrationImplementation() : null!,
+                () => new OriginalSecureStorageImplementation(),
+                new AvaeSemanticScreenReader(platformProvider),
+                new OriginalShareImplementation(platformProvider),
+                new OriginalSmsImplementation(),
+                new OriginalTextToSpeechImplementation(),
+                new OriginalVibrationImplementation(),
                 // Loopback callbacks (http://localhost:port/) in the system browser, the others in the Avalonia broker.
                 new AvaeWebAuthenticator(webAuthenticator),
                 () => Microsoft.Maui.ApplicationModel.VersionTracking.Default);
@@ -189,9 +185,8 @@ internal static class AvaloniaExtensions
 #if MACOS
         if (OperatingSystem.IsMacOS())
         {
-            // Avalonia/MAUI interop may otherwise trigger cross-thread warnings
-            // in APIs used by this integration.
-            AppKit.NSApplication.CheckForIllegalCrossThreadCalls = false;
+            // NSApplication.CheckForIllegalCrossThreadCalls is left on: turning it off for the whole app would hide real
+            // threading bugs. Call the Essentials APIs from the UI thread (AvaeMainThread), as AppKit requires.
 
             services.SetDefaults(
                 null!,

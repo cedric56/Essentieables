@@ -354,6 +354,22 @@ internal static class BlazorEssentials
     /// </summary>
     internal static void EnsureInitialized() => _ = Module;
 
+    /// <summary>
+    /// Runs the JS part of a fire-and-forget MAUI API (Vibrate, Announce, Open…): its arguments were validated synchronously,
+    /// so only browser failures remain; they are written to the console (stderr on Blazor Server) instead of being lost or,
+    /// as from an <c>async void</c>, crashing the app or the circuit.
+    /// </summary>
+    internal static void Forget(Task task, string operation)
+    {
+        if (task.IsCompletedSuccessfully)
+            return;
+        _ = task.ContinueWith(
+            t => Console.Error.WriteLine($"Essentieables: {operation} failed: {t.Exception?.GetBaseException().Message}"),
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+    }
+
     static InvalidOperationException NotInitialized() => new(
 #if ESSENTIEABLES_AVALONIA_BROWSER
         "Essentieables is not initialized yet. Await 'BlazorEssentials.InitializeAsync()' (started by UseEssentieables()) " +

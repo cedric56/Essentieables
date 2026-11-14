@@ -1,4 +1,4 @@
-// Windows only: compiled where ESSENTIEABLES_WINDOWS is defined (net10.0 and net10.0-windows*, see build/Essentieables.targets),
+﻿// Windows only: compiled where ESSENTIEABLES_WINDOWS is defined (net10.0 and net10.0-windows*, see build/Essentieables.targets),
 // so that Android, iOS, macOS and browser apps need no Windows contract package.
 #if ESSENTIEABLES_WINDOWS
 
@@ -260,7 +260,9 @@ class OriginalUnpackagedPreferencesImplementation : IPreferences
             {
                 try
                 {
-                    return (T)Convert.ChangeType(value, typeof(T), CultureInfo.InvariantCulture);
+                    // Get<int?> & co: convert to the underlying type.
+                    var type = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
+                    return (T)Convert.ChangeType(value, type, CultureInfo.InvariantCulture);
                 }
                 catch (Exception ex) when (ex is InvalidCastException or FormatException or OverflowException)
                 {
@@ -281,8 +283,9 @@ class OriginalUnpackagedPreferencesImplementation : IPreferences
 
         try
         {
-            using var stream = File.OpenRead(path);
-            var readPreferences = JsonSerializer.Deserialize(stream, AvaloniaPreferencesJsonSerializerContext.Default.PreferencesDictionary);
+            PreferencesDictionary? readPreferences;
+            using (var stream = File.OpenRead(path))
+                readPreferences = JsonSerializer.Deserialize(stream, AvaloniaPreferencesJsonSerializerContext.Default.PreferencesDictionary);
 
             if (readPreferences != null)
             {
@@ -291,9 +294,15 @@ class OriginalUnpackagedPreferencesImplementation : IPreferences
                     _preferences.TryAdd(pair.Key, pair.Value);
             }
         }
-        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+        catch (JsonException ex)
         {
-            // if deserialization fails proceed with empty settings
+            // Proceed with empty settings, but keep the unreadable file instead of overwriting it at the next save.
+            if (path == _path)
+                AtomicFile.SetAside(path, ex);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine($"Essentieables: preferences could not be read: {ex.Message}");
         }
     }
 
@@ -301,12 +310,9 @@ class OriginalUnpackagedPreferencesImplementation : IPreferences
     {
         lock (_locker)
         {
-            var dir = Path.GetDirectoryName(_path);
-            if (dir != null)
-                Directory.CreateDirectory(dir);
-
-            using var stream = File.Create(_path);
-            JsonSerializer.Serialize(stream, _preferences, AvaloniaPreferencesJsonSerializerContext.Default.PreferencesDictionary);
+            // Through a temporary file: a crash while writing never truncates the preferences.
+            AtomicFile.Write(_path, stream =>
+                JsonSerializer.Serialize(stream, _preferences, AvaloniaPreferencesJsonSerializerContext.Default.PreferencesDictionary));
         }
     }
 

@@ -154,12 +154,12 @@ class OriginalUnpackagedSecureStorageImplementation
 
             try
             {
-                using var stream = File.OpenRead(path);
-
-                var loaded = JsonSerializer.Deserialize(
-                    stream,
-                    SecureStorageJsonSerializerContext.Default
-                        .SecureStorageDictionary);
+                SecureStorageDictionary? loaded;
+                using (var stream = File.OpenRead(path))
+                    loaded = JsonSerializer.Deserialize(
+                        stream,
+                        SecureStorageJsonSerializerContext.Default
+                            .SecureStorageDictionary);
 
                 if (loaded is null)
                     return;
@@ -169,66 +169,37 @@ class OriginalUnpackagedSecureStorageImplementation
                 foreach (var pair in loaded)
                     _secureStorage[pair.Key] = pair.Value;
             }
-            catch (JsonException)
+            catch (JsonException ex)
             {
-                // Preserve the original file. Do not overwrite corrupt data
-                // until the application has a recovery strategy.
+                // The next save would replace the file with the new keys only: keep the unreadable one aside, so the
+                // secrets it holds are not destroyed (they can still be recovered by hand).
+                if (path == AppSecureStoragePath)
+                    AtomicFile.SetAside(path, ex);
             }
-            catch (IOException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                // Handle inaccessible storage according to your API policy.
+                // Unreadable for now (locked, permissions): saving would lose its content, so refuse to.
+                _unreadable = true;
+                Console.Error.WriteLine($"Essentieables: secure storage could not be read: {ex.Message}");
             }
         }
     }
 
+    // Set when the file exists but could not be read: saving would replace it with the new keys only.
+    private bool _unreadable;
+
     private void Save()
     {
-        var directory = Path.GetDirectoryName(AppSecureStoragePath);
-        if (directory is null)
-            throw new IOException("Secure storage directory is unavailable.");
+        if (_unreadable)
+            throw new IOException($"The secure storage file '{AppSecureStoragePath}' could not be read; it is not overwritten.");
 
-        Directory.CreateDirectory(directory);
-
-        var tempPath = AppSecureStoragePath + "." +
-                       Guid.NewGuid().ToString("N") + ".tmp";
-
-        try
-        {
-            using (var stream = new FileStream(
-                tempPath,
-                FileMode.CreateNew,
-                FileAccess.Write,
-                FileShare.None))
-            {
-                JsonSerializer.Serialize(
-                    stream,
-                    _secureStorage,
-                    SecureStorageJsonSerializerContext.Default
-                        .SecureStorageDictionary);
-
-                stream.Flush(flushToDisk: true);
-            }
-
-            // Same-directory replacement avoids exposing a partially
-            // serialized destination file.
-            File.Move(tempPath, AppSecureStoragePath, overwrite: true);
-        }
-        finally
-        {
-            try
-            {
-                if (File.Exists(tempPath))
-                    File.Delete(tempPath);
-            }
-            catch (IOException)
-            {
-                // Best-effort cleanup of abandoned temporary files.
-            }
-            catch (UnauthorizedAccessException)
-            {
-                // Best-effort cleanup.
-            }
-        }
+        // Through a temporary file of the same folder: a crash while writing never exposes a partially serialized file.
+        AtomicFile.Write(AppSecureStoragePath, stream =>
+            JsonSerializer.Serialize(
+                stream,
+                _secureStorage,
+                SecureStorageJsonSerializerContext.Default
+                    .SecureStorageDictionary));
     }
 
     public Task<byte[]?> GetAsync(string key)

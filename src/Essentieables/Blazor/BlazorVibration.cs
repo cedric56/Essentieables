@@ -43,46 +43,19 @@ internal class BlazorVibration : IVibration
 
     public void Vibrate() => Vibrate(TimeSpan.FromMilliseconds(500));
 
-    public async void Vibrate(TimeSpan duration)
+    public void Vibrate(TimeSpan duration)
     {
-        try
-        {
-            BlazorEssentials.EnsureInitialized();
-            if (!IsSupported)
-                throw new FeatureNotSupportedException("The Vibration API is not available in this browser.");
-            await BlazorEssentials.Module.InvokeVoidAsync("vibrate", duration.TotalMilliseconds);
-        }
-#if DEBUG
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine(ex);
-        }
-#else
-        catch
-        {
-
-        }
-#endif
+        // Validated synchronously: FeatureNotSupportedException reaches the caller, as with MAUI.
+        if (!IsSupported)
+            throw new FeatureNotSupportedException("The Vibration API is not available in this browser.");
+        if (duration < TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(duration));
+        BlazorEssentials.Forget(BlazorEssentials.Module.InvokeVoidAsync("vibrate", duration.TotalMilliseconds).AsTask(), "Vibration.Vibrate");
     }
 
-    public async void Cancel()
+    public void Cancel()
     {
-        try
-        {
-            BlazorEssentials.EnsureInitialized();
-            if (IsSupported)
-                await BlazorEssentials.Module.InvokeVoidAsync("vibrate", 0);
-        }
-#if DEBUG
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine(ex);
-        }
-#else
-        catch
-        {
-
-        }
-#endif
+        if (IsSupported)
+            BlazorEssentials.Forget(BlazorEssentials.Module.InvokeVoidAsync("vibrate", 0).AsTask(), "Vibration.Cancel");
     }
 }

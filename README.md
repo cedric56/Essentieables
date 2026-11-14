@@ -206,9 +206,10 @@ registered in the services, so the app can inject `IJSRuntime` for its own scrip
 ### Windows
 
 - **Jump list.** `AppActions.Current.AppActionActivated` is raised for the action the app was launched with, once its first
-  window is open. Launched from the jump list while the app runs, the new process hands the action to the running instance
-  (WM_COPYDATA) and exits (`AvaeAppActionsActivation.ForwardToRunningInstance = false` to keep both). `AppAction.Icon` is a
-  file of the app package (`ms-appx:///`, `.png` added when there is no extension).
+  window is open. Single instance is opt-in: start `Main` with
+  `if (AvaeAppActionsActivation.TryForwardToRunningInstance()) return;` to hand the action to a running instance of the same
+  executable (WM_COPYDATA) instead of starting a second one (not under `dotnet app.dll`). `AppAction.Icon`, when the MAUI build
+  has it, is a file of the app package (`ms-appx:///`, `.png` added when there is no extension).
 - **Storage locations.** As in MAUI and Avae.Windows.Essentials: `FileSystem.AppDataDirectory` is
   `%LOCALAPPDATA%\<Publisher>\<Package>\Data` (`…\Cache` for the cache, the `ApplicationData` folders when packaged),
   `Preferences` and `SecureStorage` are in the `Settings` folder next to it, and `Preferences` uses
@@ -431,6 +432,12 @@ await Share.Default.RequestAsync("Title", files);                  // share File
 - **Blazor file dialog:** a dialog closed without a choice is detected with the `cancel` event of the
   input (Chrome 113+, Firefox 91+, Safari 16.4+). On older browsers, `PickAsync` does not return until a file
   is chosen.
+- **Fire-and-forget APIs in the browser** (`Vibrate`, `HapticFeedback.Perform`, `Announce`, `PhoneDialer.Open`, sensors'
+  `Start`) validate their arguments and support synchronously, so `FeatureNotSupportedException` & co reach the caller as
+  with MAUI; a failure of the browser afterwards is written to the console. A sensor the browser refuses to start (iOS
+  motion permission denied…) stops monitoring and raises `BlazorSensorBase.StartFailed`.
+- **macOS**: `NSApplication.CheckForIllegalCrossThreadCalls` is no longer turned off; call the Essentials APIs from the UI
+  thread (`AvaeMainThread`).
 - **Avalonia.Browser** shares the browser limitations above (Preferences persisted in the background, file dialog
   cancellation, what each browser supports). `IJSStreamReference` streams must be read asynchronously (`CopyToAsync`):
   the browser has a single thread.

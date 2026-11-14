@@ -1,4 +1,4 @@
-
+﻿
 
 using Microsoft.JSInterop;
 using Microsoft.Maui.ApplicationModel;
@@ -56,41 +56,51 @@ internal abstract class BlazorSensorBase(string kind)
 #endif
     }
 
-    private protected async Task StartCoreAsync(SensorSpeed sensorSpeed)
+    /// <summary>
+    /// Validates synchronously, as MAUI does: <see cref="FeatureNotSupportedException"/> when the sensor is not available
+    /// (or <c>InitializeAsync</c> has not completed) and <see cref="InvalidOperationException"/> when it is already monitored
+    /// reach the caller of <c>Start</c>. The sensor counts as monitored right away, so two quick calls cannot both start it;
+    /// if the browser then refuses (permission denied…), monitoring stops and <see cref="StartFailed"/> is raised.
+    /// </summary>
+    private protected void StartCore(SensorSpeed sensorSpeed)
     {
         if (!IsSupported)
-            throw new FeatureNotSupportedException($"The {_kind} sensor is not available in this browser.");
+            throw new FeatureNotSupportedException($"The {_kind} sensor is not available in this browser (or Essentieables is not initialized yet).");
         if (IsMonitoring)
             throw new InvalidOperationException($"The {_kind} sensor is already being monitored.");
 
+        IsMonitoring = true;
         _ref?.Dispose();
-        _ref = DotNetObjectReference.Create(this);
-        var frequencyHz = ToFrequencyHz(sensorSpeed);
+        var reference = _ref = DotNetObjectReference.Create(this);
+        _ = StartJsAsync(reference, ToFrequencyHz(sensorSpeed));
+    }
 
-        bool started;
+    /// <summary>Raised when the browser refuses to start the sensor after <c>Start</c> returned (permission denied, error).</summary>
+    public event EventHandler<Exception>? StartFailed;
+
+    private async Task StartJsAsync(DotNetObjectReference<BlazorSensorBase> reference, double frequencyHz)
+    {
+        Exception? failure = null;
         try
         {
-            started = await BlazorEssentials.Module.InvokeAsync<bool>("sensorStart", _ref, _kind, frequencyHz);
+            if (await BlazorEssentials.Module.InvokeAsync<bool>("sensorStart", reference, _kind, frequencyHz))
+                return;
+            failure = new PermissionException($"The browser did not start the {_kind} sensor (permission denied or not available).");
         }
-#if DEBUG
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine(ex);
-            started = false;
+            failure = ex;
         }
-#else
-        catch
-        {
-            started = false;
-        }
-#endif
 
-        IsMonitoring = started;
-        if (!started)
+        Debug.WriteLine($"Essentieables: {_kind} sensor: {failure}");
+        // Only if no Stop/Start happened meanwhile.
+        if (ReferenceEquals(_ref, reference))
         {
-            _ref?.Dispose();
+            IsMonitoring = false;
             _ref = null;
         }
+        reference.Dispose();
+        StartFailed?.Invoke(this, failure);
     }
 
     private static double ToFrequencyHz(SensorSpeed speed) => speed switch
@@ -103,15 +113,17 @@ internal abstract class BlazorSensorBase(string kind)
 
     public void Stop()
     {
-        _ = StopAsync();
-    }
-
-    private async Task StopAsync()
-    {
         if (!IsMonitoring)
             return;
 
         IsMonitoring = false;
+        var reference = _ref;
+        _ref = null;
+        _ = StopAsync(reference);
+    }
+
+    private async Task StopAsync(DotNetObjectReference<BlazorSensorBase>? reference)
+    {
 
         try
         {
@@ -130,8 +142,7 @@ internal abstract class BlazorSensorBase(string kind)
 #endif
         finally
         {
-            _ref?.Dispose();
-            _ref = null;
+            reference?.Dispose();
         }
     }
 
@@ -161,7 +172,7 @@ internal class BlazorAccelerometer : BlazorSensorBase, IAccelerometer
 		remove { }
 	}
 
-	public async void Start(SensorSpeed sensorSpeed) => await StartCoreAsync(sensorSpeed);
+	public void Start(SensorSpeed sensorSpeed) => StartCore(sensorSpeed);
 
 	private protected override void OnReadingCore(string json)
 	{
@@ -181,7 +192,7 @@ internal class BlazorGyroscope : BlazorSensorBase, IGyroscope
 
 	public event EventHandler<GyroscopeChangedEventArgs>? ReadingChanged;
 
-	public async void Start(SensorSpeed sensorSpeed) => await StartCoreAsync(sensorSpeed);
+	public void Start(SensorSpeed sensorSpeed) => StartCore(sensorSpeed);
 
 	private protected override void OnReadingCore(string json)
 	{
@@ -201,7 +212,7 @@ internal class BlazorOrientationSensor : BlazorSensorBase, IOrientationSensor
 
 	public event EventHandler<OrientationSensorChangedEventArgs>? ReadingChanged;
 
-	public async void Start(SensorSpeed sensorSpeed) => await StartCoreAsync(sensorSpeed);
+	public void Start(SensorSpeed sensorSpeed) => StartCore(sensorSpeed);
 
 	private protected override void OnReadingCore(string json)
 	{
@@ -222,9 +233,9 @@ internal class BlazorCompass : BlazorSensorBase, ICompass
 
 	public event EventHandler<CompassChangedEventArgs>? ReadingChanged;
 
-	public async void Start(SensorSpeed sensorSpeed) => await StartCoreAsync(sensorSpeed);
+	public void Start(SensorSpeed sensorSpeed) => StartCore(sensorSpeed);
 
-	public async void Start(SensorSpeed sensorSpeed, bool applyLowPassFilter) => await StartCoreAsync(sensorSpeed);
+	public void Start(SensorSpeed sensorSpeed, bool applyLowPassFilter) => StartCore(sensorSpeed);
 
 	private protected override void OnReadingCore(string json)
 	{
@@ -240,7 +251,7 @@ internal class BlazorMagnetometer : BlazorSensorBase, IMagnetometer
 
     public event EventHandler<MagnetometerChangedEventArgs>? ReadingChanged;
 
-    public async void Start(SensorSpeed sensorSpeed) => await StartCoreAsync(sensorSpeed);
+    public void Start(SensorSpeed sensorSpeed) => StartCore(sensorSpeed);
 
     private protected override void OnReadingCore(string json)
     {
