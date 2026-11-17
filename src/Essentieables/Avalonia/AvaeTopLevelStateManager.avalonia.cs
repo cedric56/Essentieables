@@ -19,12 +19,22 @@ internal class AvaeTopLevelStateManager : IAvaloniaEssentialsPlatformProvider
     /// <summary>The manager created by the last <c>UseEssentieables()</c> call.</summary>
     internal static AvaeTopLevelStateManager? Current { get; private set; }
 
+    static bool s_classHandlerAdded;
+
+    // The top levels whose Closed event is already handled: a window activated again is not subscribed twice.
+    readonly System.Collections.Generic.HashSet<TopLevel> _subscribed = new();
+
     public AvaeTopLevelStateManager()
     {
         Current = this;
+        // Once per process: UseEssentieables() called twice would otherwise stack class handlers. The handler follows the
+        // current manager.
+        if (s_classHandlerAdded)
+            return;
+        s_classHandlerAdded = true;
         TopLevel.GotFocusEvent.AddClassHandler(typeof(TopLevel), (sender, args) =>
         {
-            OnActivated((TopLevel)sender!);
+            Current?.OnActivated((TopLevel)sender!);
         });
     }
 
@@ -34,7 +44,8 @@ internal class AvaeTopLevelStateManager : IAvaloniaEssentialsPlatformProvider
             return;
 
         _active = topLevel;
-        topLevel.Closed += OnTopLevelClosed;
+        if (_subscribed.Add(topLevel))
+            topLevel.Closed += OnTopLevelClosed;
 
         ActiveTopLevelChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -42,7 +53,10 @@ internal class AvaeTopLevelStateManager : IAvaloniaEssentialsPlatformProvider
     void OnTopLevelClosed(object? sender, EventArgs e)
     {
         if (sender is TopLevel topLevel)
+        {
             topLevel.Closed -= OnTopLevelClosed;
+            _subscribed.Remove(topLevel);
+        }
 
         if (ReferenceEquals(_active, sender))
         {

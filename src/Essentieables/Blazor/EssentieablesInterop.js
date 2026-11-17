@@ -1,4 +1,4 @@
-// Avalonia.Browser host of the Blazor implementations of Essentieables.
+﻿// Avalonia.Browser host of the Blazor implementations of Essentieables.
 //
 // Blazor ships a JS interop dispatcher in blazor.webassembly.js / blazor.server.js; an Avalonia.Browser app
 // has none. This module attaches the same dispatcher (@microsoft/dotnet-js-interop, see dotnet-js-interop.js)
@@ -87,12 +87,22 @@ export function supplyDotNetStream(streamId, data, error) {
 
 const stagedChunks = new Map();
 let nextChunkToken = 1;
+// A chunk that is never taken (the .NET read was canceled between the two calls) would stay in memory: dropped after a minute.
+const stagedChunkLifetimeMs = 60000;
+
+function purgeStagedChunks() {
+	const now = Date.now();
+	for (const [token, entry] of stagedChunks) {
+		if (now - entry.at > stagedChunkLifetimeMs)
+			stagedChunks.delete(token);
+	}
+}
 
 /** Takes the chunk staged by essentieablesInterop.stageChunk (synchronous [JSImport]). */
 export function takeStagedChunk(token) {
-	const chunk = stagedChunks.get(token);
+	const entry = stagedChunks.get(token);
 	stagedChunks.delete(token);
-	return chunk ?? new Uint8Array(0);
+	return entry?.bytes ?? new Uint8Array(0);
 }
 
 globalThis.essentieablesInterop = Object.assign(globalThis.essentieablesInterop ?? {}, {
@@ -109,8 +119,9 @@ globalThis.essentieablesInterop = Object.assign(globalThis.essentieablesInterop 
 		} else {
 			throw new Error("The stream reference is neither a Blob nor a typed array.");
 		}
+		purgeStagedChunks();
 		const token = nextChunkToken++;
-		stagedChunks.set(token, bytes);
+		stagedChunks.set(token, { bytes, at: Date.now() });
 		return token;
 	}
 });

@@ -23,10 +23,36 @@ class OriginalAppActionsImplementation : IAppActions
     , IPlatformAppActions
 #endif
 {
-    public bool IsSupported => true;
+    /// <summary>
+    /// Jump lists need package identity (MSIX, or a sparse package): an unpackaged app gets false, and GetAsync/SetAsync throw
+    /// <see cref="FeatureNotSupportedException"/> instead of a COM error.
+    /// </summary>
+    public bool IsSupported
+    {
+        get
+        {
+            if (!AppInfoUtils.IsPackagedApp)
+                return false;
+            try
+            {
+                return JumpList.IsSupported();
+            }
+            catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or InvalidOperationException or UnauthorizedAccessException)
+            {
+                return false;
+            }
+        }
+    }
+
+    void EnsureSupported()
+    {
+        if (!IsSupported)
+            throw new FeatureNotSupportedException("App actions (jump list) need a packaged app (MSIX) on Windows.");
+    }
 
     public async Task<IEnumerable<AppAction>> GetAsync()
     {
+        EnsureSupported();
         // Load existing items
         var jumpList = await JumpList.LoadCurrentAsync();
 
@@ -39,6 +65,7 @@ class OriginalAppActionsImplementation : IAppActions
 
     public async Task SetAsync(IEnumerable<AppAction> actions)
     {
+        EnsureSupported();
         // Load existing items
         var jumpList = await JumpList.LoadCurrentAsync();
 

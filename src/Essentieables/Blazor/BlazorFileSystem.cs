@@ -2,6 +2,7 @@
 using Microsoft.Maui.Storage;
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace Essentieables;
@@ -108,8 +109,29 @@ internal class BlazorFileSystem : IFileSystem
     public async Task<bool> AppPackageFileExistsAsync(string filename)
     {
         ArgumentException.ThrowIfNullOrEmpty(filename);
-        return await BlazorEssentials.Module.InvokeAsync<bool>("appFileExists", NormalizePath(filename)).ConfigureAwait(false);
+        string path;
+        try
+        {
+            path = NormalizePath(filename);
+        }
+        catch (ArgumentException)
+        {
+            // Outside the app package: not one of its files.
+            return false;
+        }
+        return await BlazorEssentials.Module.InvokeAsync<bool>("appFileExists", path).ConfigureAwait(false);
     }
 
-    static string NormalizePath(string filename) => filename.Replace('\\', '/').TrimStart('/');
+    /// <summary>
+    /// A path relative to the app base URL. An absolute URL ("https://other-site/…"), a scheme ("data:…") or a ".." segment
+    /// would read outside the app package: refused.
+    /// </summary>
+    internal static string NormalizePath(string filename)
+    {
+        var path = filename.Replace('\\', '/').TrimStart('/');
+        if (path.Contains(':', StringComparison.Ordinal)
+            || path.Split('/').Any(segment => segment is ".." || segment.Equals("%2e%2e", StringComparison.OrdinalIgnoreCase)))
+            throw new ArgumentException($"'{filename}' is not a path inside the app package.", nameof(filename));
+        return path;
+    }
 }

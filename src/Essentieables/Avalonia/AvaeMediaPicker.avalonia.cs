@@ -125,28 +125,43 @@ internal class AvaeMediaPicker(AvaeTopLevelStateManager topLevelStateManager, Av
             var tempFolder = await tempLocation.CreateFolderAsync(CacheFolderName, CreationCollisionOption.OpenIfExists);
             var tempFile = await tempFolder.CreateFileAsync($"{CacheFileName}{extension}", CreationCollisionOption.GenerateUniqueName);
             var token = global::Windows.ApplicationModel.DataTransfer.SharedStorageAccessManager.AddFile(tempFile);
-
-            var set = new ValueSet();
-            if (mode == CameraCaptureUIMode.Photo)
+            var captured = false;
+            try
             {
-                set.Add("MediaType", "photo");
-                set.Add("PhotoFileToken", token);
+                var set = new ValueSet();
+                if (mode == CameraCaptureUIMode.Photo)
+                {
+                    set.Add("MediaType", "photo");
+                    set.Add("PhotoFileToken", token);
+                }
+                else
+                {
+                    set.Add("MediaType", "video");
+                    set.Add("VideoFileToken", token);
+                }
+
+                var uri = new Uri(WindowsCameraAppUri);
+                var result = await Launcher.LaunchUriForResultsAsync(uri, options, set);
+
+                captured = result.Status == LaunchUriStatus.Success && result.Result is not null;
+                return captured ? tempFile : null;
             }
-            else
+            finally
             {
-                set.Add("MediaType", "video");
-                set.Add("VideoFileToken", token);
+                // Released whatever happens; the empty file of a canceled or failed capture is not left in the cache.
+                global::Windows.ApplicationModel.DataTransfer.SharedStorageAccessManager.RemoveFile(token);
+                if (!captured)
+                {
+                    try
+                    {
+                        await tempFile.DeleteAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine(ex);
+                    }
+                }
             }
-
-            var uri = new Uri(WindowsCameraAppUri);
-            var result = await Launcher.LaunchUriForResultsAsync(uri, options, set);
-
-            global::Windows.ApplicationModel.DataTransfer.SharedStorageAccessManager.RemoveFile(token);
-
-            if (result.Status == LaunchUriStatus.Success && result.Result is not null)
-                return tempFile;
-
-            return null;
         }
     }
 

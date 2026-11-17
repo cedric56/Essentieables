@@ -21,7 +21,16 @@ namespace Essentieables
 
         public static bool AppPackageFileExists(string filename)
         {
-            var file = PlatformGetFullAppPackageFilePath(filename);
+            string file;
+            try
+            {
+                file = PlatformGetFullAppPackageFilePath(filename);
+            }
+            catch (ArgumentException)
+            {
+                // Outside the app package: not one of its files.
+                return false;
+            }
             return File.Exists(file);
         }
 
@@ -31,7 +40,13 @@ namespace Essentieables
                 throw new ArgumentNullException(nameof(filename));
 
             filename = NormalizePath(filename);
-            return Path.Combine(AppInfoUtils.PlatformGetFullAppPackageFilePath, filename);
+            // Path.Combine returns an absolute filename as is, and ".." climbs out of the app folder: both refused.
+            var root = Path.GetFullPath(AppInfoUtils.PlatformGetFullAppPackageFilePath);
+            var full = Path.GetFullPath(Path.Combine(root, filename));
+            var prefix = root.EndsWith(Path.DirectorySeparatorChar) ? root : root + Path.DirectorySeparatorChar;
+            if (Path.IsPathRooted(filename) || !full.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException($"'{filename}' is not a path inside the app package.", nameof(filename));
+            return full;
         }
 
         public static bool TryGetAppPackageFileUri(string filename, [NotNullWhen(true)] out string? uri)

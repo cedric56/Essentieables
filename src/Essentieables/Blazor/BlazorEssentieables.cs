@@ -1,4 +1,4 @@
-﻿﻿using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.JSInterop;
 using Microsoft.Maui.ApplicationModel;
@@ -428,7 +428,8 @@ internal static class BlazorEssentials
             session = s_global ??= new BlazorEssentialsSession(provider);
         }
 
-        // Makes the session current for the rest of this flow, even when no circuit activity set it.
+        // Current for the rest of this method and what it awaits (the JS module load below). An AsyncLocal set inside an
+        // async method does not flow back to the caller: afterwards, the circuit handler makes the session current.
         CurrentSession = session;
 
         await session.InitializeAsync(async () =>

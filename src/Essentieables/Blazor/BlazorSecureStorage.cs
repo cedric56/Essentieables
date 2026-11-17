@@ -34,6 +34,23 @@ internal sealed class BlazorSecureStorage : ISecureStorage
     private SemaphoreSlim GetLock(string storageKey)
         => _locks.GetOrAdd(storageKey, _ => new SemaphoreSlim(1, 1));
 
+    // The last RemoveAll: it deletes every prefixed entry, including keys this instance does not know yet, so a Get/Set
+    // that starts after it waits for it. Otherwise a sign-out RemoveAll() followed by a sign-in SetAsync("token") could
+    // see the new token deleted by the removal still in flight.
+    private Task _removeAll = Task.CompletedTask;
+
+    private async Task WaitForRemoveAllAsync()
+    {
+        try
+        {
+            await Volatile.Read(ref _removeAll).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Reported by FlushAsync.
+        }
+    }
+
     /// <summary>Loads the set of existing keys (not values). Idempotent. Call once at startup.</summary>
     public async Task InitializeAsync()
     {
@@ -64,6 +81,7 @@ internal sealed class BlazorSecureStorage : ISecureStorage
         var storageKey = KeyPrefix + key;
         var gate = GetLock(storageKey);
 
+        await WaitForRemoveAllAsync().ConfigureAwait(false);
         // Waits for any in-flight Remove on this key to finish first, so a
         // Remove immediately followed by a Get can't return the stale value.
         await gate.WaitAsync().ConfigureAwait(false);
@@ -92,6 +110,7 @@ internal sealed class BlazorSecureStorage : ISecureStorage
         var storageKey = KeyPrefix + key;
         var gate = GetLock(storageKey);
 
+        await WaitForRemoveAllAsync().ConfigureAwait(false);
         await gate.WaitAsync().ConfigureAwait(false);
         try
         {
@@ -109,6 +128,7 @@ internal sealed class BlazorSecureStorage : ISecureStorage
 
     public bool Remove(string key)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
         var storageKey = KeyPrefix + key;
 
         // The return value reflects what this instance knows; the removal is queued in any case,
@@ -128,11 +148,23 @@ internal sealed class BlazorSecureStorage : ISecureStorage
         foreach (var storageKey in keys)
             _knownKeys.TryRemove(storageKey, out _);
 
-        Track(RemoveAllCoreAsync(keys));
+        var previous = Volatile.Read(ref _removeAll);
+        var removal = RemoveAllCoreAsync(previous, keys);
+        Volatile.Write(ref _removeAll, removal);
+        Track(removal);
     }
 
-    private async Task RemoveAllCoreAsync(System.Collections.Generic.List<string> keys)
+    private async Task RemoveAllCoreAsync(Task previous, System.Collections.Generic.List<string> keys)
     {
+        try
+        {
+            await previous.ConfigureAwait(false);
+        }
+        catch
+        {
+            // Reported by FlushAsync.
+        }
+
         // Always in the same order, so two concurrent RemoveAll cannot deadlock.
         var gates = keys.Order(StringComparer.Ordinal).Select(GetLock).ToList();
         foreach (var gate in gates)

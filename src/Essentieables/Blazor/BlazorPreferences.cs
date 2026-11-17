@@ -316,7 +316,10 @@ internal sealed class BlazorPreferences : IPreferences
             }
 
             var id = ++_nextOperationId;
-            var task = ExecutePersistenceAsync(operation);
+            // One operation at a time, in call order: a Clear (by prefix, not covered by the per-key locks) can then never
+            // overtake a Set of the same key, which would bring the value back in localStorage after the reload.
+            var task = RunAfterAsync(_tail, operation);
+            _tail = task;
 
             _pending.Add(id, task);
 
@@ -330,6 +333,15 @@ internal sealed class BlazorPreferences : IPreferences
                 TaskContinuationOptions.ExecuteSynchronously,
                 TaskScheduler.Default);
         }
+    }
+
+    private Task _tail = Task.CompletedTask;
+
+    private async Task RunAfterAsync(Task previous, Func<Task> operation)
+    {
+        // ExecutePersistenceAsync never throws: its failures are kept for FlushAsync.
+        await previous.ConfigureAwait(false);
+        await ExecutePersistenceAsync(operation).ConfigureAwait(false);
     }
 
     private async Task ExecutePersistenceAsync(Func<Task> operation)

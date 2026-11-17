@@ -210,7 +210,8 @@ registered in the services, so the app can inject `IJSRuntime` for its own scrip
 - **Jump list.** `AppActions.Current.AppActionActivated` is raised for the action the app was launched with, once its first
   window is open. Single instance is opt-in: start `Main` with
   `if (AvaeAppActionsActivation.TryForwardToRunningInstance()) return;` to hand the action to a running instance of the same
-  executable (WM_COPYDATA) instead of starting a second one (not under `dotnet app.dll`). `AppAction.Icon`, when the MAUI build
+  executable (WM_COPYDATA) instead of starting a second one (not under `dotnet app.dll`). Jump lists need package identity:
+  in an unpackaged app `AppActions.IsSupported` is false and `GetAsync`/`SetAsync` throw `FeatureNotSupportedException`. `AppAction.Icon`, when the MAUI build
   has it, is a file of the app package (`ms-appx:///`, `.png` added when there is no extension).
 - **Storage locations.** As in MAUI and Avae.Windows.Essentials: `FileSystem.AppDataDirectory` is
   `%LOCALAPPDATA%\<Publisher>\<Package>\Data` (`…\Cache` for the cache, the `ApplicationData` folders when packaged),
@@ -315,7 +316,12 @@ results; a dismissed file picker or camera popup returns `null`.
 - `FilePicker`: the files are streamed into the cache directory (`BlazorFilePicker.MaxFileSize`, 100 MB by
   default); browser-supplied names are reduced to a safe file name. `PickOptions.FileTypes` takes an entry for
   `DevicePlatform.Create("Browser")` with extensions and/or MIME types (`".pdf"`, `"image/*"`); without one,
-  the extensions and MIME types given for the other platforms are used.
+  the extensions and MIME types given for the other platforms are used. `PickOptions.Images`, `PickOptions.Videos` and
+  `FilePickerFileType.Images` & co throw on the portable MAUI build (Blazor, Avalonia.Browser, Avalonia on Linux and macOS):
+  use `EssentieablesPickOptions.Images`, `.Videos`, `.Pdf` and `EssentieablesFileTypes` (`Images`, `Png`, `Jpeg`, `Videos`,
+  `Pdf`, `Create(...)`), which have an entry for every platform, the browser included.
+- `OpenAppPackageFileAsync` / `AppPackageFileExistsAsync` take a path relative to the app (Windows: to its folder); an
+  absolute path or URL, a scheme or a `..` segment is refused (`ArgumentException`; `AppPackageFileExistsAsync` returns false).
 - Captured photos and videos are written to the cache directory too, so `FullPath` is a real file. Read
   picked or captured files with `OpenReadAsync()` on the result (or `Extensions.OpenReadAsync`), or with
   `System.IO`; `FileResult.OpenReadAsync()` called through the base type is not implemented by the portable
@@ -403,7 +409,8 @@ What the JS implementations can do depends on the browser (sensors, vibration, c
    rest only: any script running on the same origin (an XSS, a compromised dependency) can use the key to
    decrypt them, so it is not equivalent to a platform keychain. Clearing site data deletes the key: the
    values then read as `null`. Read/write failures throw; `Remove`/`RemoveAll` are queued (their failures
-   are reported by `BlazorSecureStorage.FlushAsync()`).
+   are reported by `BlazorSecureStorage.FlushAsync()`), and a `GetAsync`/`SetAsync` made after `RemoveAll` waits for it.
+   The storage key is bound to each value (AES-GCM additional data); values written by earlier versions are still read.
 3. `%LOCALAPPDATA%\<Publisher>\<Package>` (`Data`, `Cache`, `Settings`), the `ApplicationData` folders in a packaged app.
 4. For `http://localhost:port/` callbacks (`HttpListener`); other callbacks use the second implementation.
 
@@ -451,7 +458,10 @@ await Share.Default.RequestAsync("Title", files);                  // share File
 - **Fire-and-forget APIs in the browser** (`Vibrate`, `HapticFeedback.Perform`, `Announce`, `PhoneDialer.Open`, sensors'
   `Start`) validate their arguments and support synchronously, so `FeatureNotSupportedException` & co reach the caller as
   with MAUI; a failure of the browser afterwards is written to the console. A sensor the browser refuses to start (iOS
-  motion permission denied…) stops monitoring and raises `BlazorSensorBase.StartFailed`.
+  motion permission denied…) stops monitoring and raises `BlazorSensorBase.StartFailed`. A sensor stopped while its start
+  waits for the iOS permission stays stopped.
+- **Blazor Geolocation:** as in MAUI, a denied permission raises `ListeningFailed` and stops listening; an unavailable
+  position (no signal) raises it and keeps listening.
 - **macOS**: `NSApplication.CheckForIllegalCrossThreadCalls` is no longer turned off; call the Essentials APIs from the UI
   thread (`AvaeMainThread`).
 - **Avalonia.Browser** shares the browser limitations above (Preferences persisted in the background, file dialog

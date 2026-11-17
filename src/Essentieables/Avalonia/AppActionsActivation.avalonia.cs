@@ -124,10 +124,18 @@ static class AvaeAppActionsActivation
             if (string.IsNullOrEmpty(id))
                 return;
 
-            // The title and subtitle come from the jump list; an unknown id is still reported.
-            var actions = await appActions.GetAsync();
-            var action = actions.FirstOrDefault(a => a.Id == id) ?? new AppAction(id, id);
-            await appActions.OnLaunched(action);
+            // The title and subtitle come from the jump list when it can be read; the action is reported in any case.
+            AppAction? action = null;
+            try
+            {
+                if (appActions.IsSupported)
+                    action = (await appActions.GetAsync()).FirstOrDefault(a => a.Id == id);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex);
+            }
+            await appActions.OnLaunched(action ?? new AppAction(id, id));
         }
         catch (Exception ex)
         {

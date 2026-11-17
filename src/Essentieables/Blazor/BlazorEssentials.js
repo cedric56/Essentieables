@@ -819,11 +819,14 @@ export async function secureGet(storageKey) {
 	// site data was partly cleared, corrupted entry) reads as missing, as on the native platforms.
 	const key = await ssGetOrCreateKey();
 	try {
-		const { iv, data } = JSON.parse(raw);
-		const plainBuf = await crypto.subtle.decrypt(
-			{ name: "AES-GCM", iv: new Uint8Array(iv) },
-			key,
-			new Uint8Array(data));
+		const entry = JSON.parse(raw);
+		// v2: base64, the storage key bound as additional data (a value copied under another key does not decrypt).
+		// v1 (no "v"): byte arrays, no additional data; still read, rewritten in v2 by the next Set.
+		const params = entry.v === 2
+			? { name: "AES-GCM", iv: ssFromBase64(entry.iv), additionalData: new TextEncoder().encode(storageKey) }
+			: { name: "AES-GCM", iv: new Uint8Array(entry.iv) };
+		const data = entry.v === 2 ? ssFromBase64(entry.data) : new Uint8Array(entry.data);
+		const plainBuf = await crypto.subtle.decrypt(params, key, data);
 		return new TextDecoder().decode(plainBuf);
 	} catch {
 		localStorage.removeItem(storageKey);
@@ -835,14 +838,30 @@ export async function secureSet(storageKey, value) {
 	const key = await ssGetOrCreateKey();
 	const iv = crypto.getRandomValues(new Uint8Array(12));
 	const cipherBuf = await crypto.subtle.encrypt(
-		{ name: "AES-GCM", iv },
+		{ name: "AES-GCM", iv, additionalData: new TextEncoder().encode(storageKey) },
 		key,
 		new TextEncoder().encode(value));
 
 	localStorage.setItem(storageKey, JSON.stringify({
-		iv: Array.from(iv),
-		data: Array.from(new Uint8Array(cipherBuf))
+		v: 2,
+		iv: ssToBase64(iv),
+		data: ssToBase64(new Uint8Array(cipherBuf))
 	}));
+}
+
+function ssToBase64(bytes) {
+	let binary = "";
+	for (let i = 0; i < bytes.length; i += 0x8000)
+		binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+	return btoa(binary);
+}
+
+function ssFromBase64(text) {
+	const binary = atob(text);
+	const bytes = new Uint8Array(binary.length);
+	for (let i = 0; i < binary.length; i++)
+		bytes[i] = binary.charCodeAt(i);
+	return bytes;
 }
 
 export function secureRemove(storageKey) {
@@ -1541,9 +1560,16 @@ export function sensorIsSupported(kind) {
 }
 let magSensor = null;
 
+// Incremented by sensorStop: a start still waiting for the iOS permission when the sensor is stopped (or stopped and
+// started again) must not register its handler afterwards, with a .NET reference that is already disposed.
+const sensorGenerations = {};
+
 export async function sensorStart(dotNetRef, kind, frequencyHz) {
 	if (!sensorIsSupported(kind) || sensorHandlers[kind])
 		return false;
+	const generation = sensorGenerations[kind] ?? 0;
+	// Stopped (or restarted) meanwhile: nothing to register, and no failure to report.
+	const superseded = () => (sensorGenerations[kind] ?? 0) !== generation || !!sensorHandlers[kind];
 
 	// iOS Safari requires an explicit permission request.
 	const eventCtor =
@@ -1554,6 +1580,8 @@ export async function sensorStart(dotNetRef, kind, frequencyHz) {
 	if (typeof eventCtor?.requestPermission === "function") {
 		const state = await eventCtor.requestPermission();
 
+		if (superseded())
+			return true;
 		if (state !== "granted")
 			return false;
 	}
@@ -1672,6 +1700,7 @@ export async function sensorStart(dotNetRef, kind, frequencyHz) {
 }
 
 export function sensorStop(kind) {
+	sensorGenerations[kind] = (sensorGenerations[kind] ?? 0) + 1;
 	const entry = sensorHandlers[kind];
 
 	if (entry) {
@@ -1715,8 +1744,16 @@ export async function appFileExists(path) {
 
 let ariaLiveRegion = null;
 
+let pendingAnnouncements = null;
+
 export function announce(text) {
 	const doc = globalThis.document;
+	// Announcements made within the same 50 ms are read together, instead of each one erasing the previous one.
+	if (pendingAnnouncements) {
+		pendingAnnouncements.push(text);
+		return;
+	}
+	pendingAnnouncements = [text];
 	if (!ariaLiveRegion) {
 		ariaLiveRegion = doc.createElement('div');
 		ariaLiveRegion.setAttribute('aria-live', 'polite');
@@ -1726,7 +1763,11 @@ export function announce(text) {
 	}
 	// Clear then set so repeated identical announcements are re-read.
 	ariaLiveRegion.textContent = '';
-	globalThis.setTimeout(() => { ariaLiveRegion.textContent = text; }, 50);
+	globalThis.setTimeout(() => {
+		const texts = pendingAnnouncements;
+		pendingAnnouncements = null;
+		ariaLiveRegion.textContent = texts.join(' ');
+	}, 50);
 }
 
 

@@ -189,7 +189,12 @@ internal sealed class BlazorGeolocation : IGeolocation
             _ => GeolocationError.PositionUnavailable,
         };
         if (error == GeolocationError.Unauthorized)
+        {
             _isEnabled = false;
+            // As MAUI: listening stops when it fails for good (a denied permission does not come back by itself).
+            // An unavailable position (no signal) is transient: the browser keeps watching and reports the next one.
+            StopListeningForeground();
+        }
         ListeningFailed?.Invoke(this, new GeolocationListeningFailedEventArgs(error));
     }
 
