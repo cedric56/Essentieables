@@ -1,4 +1,4 @@
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.JSInterop;
 using Microsoft.JSInterop.Infrastructure;
 using Microsoft.Maui.Storage;
@@ -99,8 +99,9 @@ public class AuditFourFixesTests
         var signIn = new Uri($"https://idp.example/authorize?client_id=app&state=s3cr%C3%A9t&redirect_uri={Uri.EscapeDataString(callback.ToString())}");
         var statuses = new List<HttpStatusCode>();
 
-        var result = await AvaeWebAuthenticator.ListenAsync(signIn, callback, null, _ =>
+        var result = await AvaeWebAuthenticator.ListenAsync(signIn, callback, null, signInUrl =>
         {
+            // The parameter is not named "_": "_ = Task.Run(…)" would then assign it instead of discarding.
             _ = Task.Run(async () =>
             {
                 using var client = new HttpClient();
@@ -117,7 +118,7 @@ public class AuditFourFixesTests
 
         Assert.Equal("good", result.Properties["code"]);
         await WaitUntil(() => { lock (statuses) return statuses.Count == 3; });
-        Assert.Equal([HttpStatusCode.NotFound, HttpStatusCode.BadRequest, HttpStatusCode.OK], statuses);
+        Assert.Equal(new[] { HttpStatusCode.NotFound, HttpStatusCode.BadRequest, HttpStatusCode.OK }, statuses);
     }
 
     [Fact]
@@ -126,8 +127,9 @@ public class AuditFourFixesTests
         var port = FreePort();
         var callback = new Uri($"http://localhost:{port}/");
 
-        var result = await AvaeWebAuthenticator.ListenAsync(new Uri("https://idp.example/authorize"), callback, null, _ =>
+        var result = await AvaeWebAuthenticator.ListenAsync(new Uri("https://idp.example/authorize"), callback, null, signInUrl =>
         {
+            // The parameter is not named "_": "_ = Task.Run(…)" would then assign it instead of discarding.
             _ = Task.Run(async () =>
             {
                 using var client = new HttpClient();
