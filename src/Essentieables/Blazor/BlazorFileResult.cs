@@ -9,7 +9,7 @@ namespace Essentieables;
 /// A picked or captured file. It always exists on disk at <see cref="FileBase.FullPath"/> (in the cache
 /// directory of the session), so System.IO, Launcher and Share can read it.
 /// The portable Microsoft.Maui.Essentials build cannot open files itself: read the content with
-/// <c>OpenReadAsync()</c> on this type, or with <c>Extensions.OpenReadAsync(FileBase, true)</c>.
+/// <c>OpenReadAsync()</c> on this type, or with <c>OpenReadSafeAsync()</c> (Essentieables.Extensions) on any FileBase.
 /// </summary>
 internal class BlazorFileResult : FileResult, IAvaeFileResult
 {

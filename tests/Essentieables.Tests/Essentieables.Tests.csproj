@@ -23,6 +23,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Essentieables\Essentieables.csproj" />
     <Compile Include="..\..\src\Essentieables\Blazor\**\*.cs" Link="Blazor\%(RecursiveDir)%(Filename)%(Extension)" />
+    <!-- The loopback sign-in listener of the desktop hosts: plain sockets, testable on every OS. -->
+    <Compile Include="..\..\src\Essentieables\Avalonia\LoopbackWebAuthenticator.avalonia.cs" Link="Avalonia\LoopbackWebAuthenticator.avalonia.cs" />
   </ItemGroup>
 
 </Project>

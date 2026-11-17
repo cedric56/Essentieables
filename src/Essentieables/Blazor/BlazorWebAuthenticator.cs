@@ -53,6 +53,29 @@ internal class BlazorWebAuthenticator : IWebAuthenticator
             BlazorEssentials.Forget(module.InvokeVoidAsync("authenticateCancel").AsTask(), "WebAuthenticator cancel"));
 
         string? callbackUri;
+        try
+        {
+            callbackUri = await InvokeAsync(authenticationUrl, callbackUrl, cancellationToken).ConfigureAwait(false);
+        }
+        catch (JSException ex) when (ex.Message.Contains("InvalidOperation:", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("An authentication is already in progress.", ex);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (string.IsNullOrWhiteSpace(callbackUri))
+        {
+            throw new InvalidOperationException(
+                "Authentication completed without a callback URI.");
+        }
+
+        return new WebAuthenticatorResult(new Uri(callbackUri), options.ResponseDecoder);
+    }
+
+    async Task<string?> InvokeAsync(Uri? authenticationUrl, Uri? callbackUrl, CancellationToken cancellationToken)
+    {
+        string? callbackUri;
         if (UseStartEndpoint)
         {
             var url = BuildStartUrl(new Dictionary<string, string?>
@@ -80,16 +103,7 @@ internal class BlazorWebAuthenticator : IWebAuthenticator
                     authenticationUrl.ToString(),
                     callbackUrl.ToString());
         }
-
-        cancellationToken.ThrowIfCancellationRequested();
-
-        if (string.IsNullOrWhiteSpace(callbackUri))
-        {
-            throw new InvalidOperationException(
-                "Authentication completed without a callback URI.");
-        }
-
-        return new WebAuthenticatorResult(new Uri(callbackUri), options.ResponseDecoder);
+        return callbackUri;
     }
 
     // Microsoft.AspNetCore.WebUtilities is not available in Blazor WebAssembly projects.

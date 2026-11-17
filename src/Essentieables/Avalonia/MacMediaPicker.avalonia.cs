@@ -54,7 +54,7 @@ internal sealed class AvaeMacMediaPicker(AvaloniaMediaPicker picker) : IAvaeMedi
         => AvaeMainThread.InvokeOnMainThreadAsync(show);
 }
 
-/// <summary>A captured file: readable with <c>Essentieables.Extensions.OpenReadAsync</c> (the portable MAUI build cannot open it).</summary>
+/// <summary>A captured file: readable with <c>Essentieables.Extensions.OpenReadSafeAsync</c> (the portable MAUI build cannot open it).</summary>
 internal sealed class MacFileResult(string fullPath, string contentType) : FileResult(fullPath, contentType), IAvaeFileResult
 {
     public Task<Stream> OpenFileStreamAsync() => Task.FromResult<Stream>(File.OpenRead(FullPath));

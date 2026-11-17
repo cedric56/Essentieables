@@ -12,6 +12,7 @@ using System.IO;
 using System.Reflection;
 using System.Runtime.Versioning;
 using System.Text.Json;
+using System.Threading.Tasks;
 using Windows.Storage;
 using PreferencesDictionary = System.Collections.Concurrent.ConcurrentDictionary<string, System.Collections.Concurrent.ConcurrentDictionary<string, string>>;
 using ShareNameDictionary = System.Collections.Concurrent.ConcurrentDictionary<string, string>;
@@ -133,13 +134,16 @@ class OriginalPackagedPreferencesImplementation : IPreferences
             var appDataContainer = GetApplicationDataContainer(sharedName);
             if (appDataContainer.Values.TryGetValue(key, out var tempValue) && tempValue != null)
             {
-                if (defaultValue is DateTime)
+                // From the type, not from the default value: Get<DateTime?>(key, null) has no DateTime default.
+                var type = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
+                if (type == typeof(DateTime))
                 {
-                    return (T)(object)DateTime.FromBinary((long)tempValue);
+                    if (tempValue is long binary)
+                        return (T)(object)DateTime.FromBinary(binary);
                 }
-                else if (defaultValue is DateTimeOffset)
+                else if (type == typeof(DateTimeOffset))
                 {
-                    if (DateTimeOffset.TryParse((string)tempValue, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateTimeOffset))
+                    if (tempValue is string text && DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateTimeOffset))
                         return (T)(object)dateTimeOffset;
                 }
                 else if (tempValue is T typed)
@@ -150,7 +154,7 @@ class OriginalPackagedPreferencesImplementation : IPreferences
                 {
                     try
                     {
-                        return (T)Convert.ChangeType(tempValue, typeof(T), CultureInfo.InvariantCulture);
+                        return (T)Convert.ChangeType(tempValue, type, CultureInfo.InvariantCulture);
                     }
                     catch (Exception ex) when (ex is InvalidCastException or FormatException or OverflowException)
                     {
@@ -242,7 +246,9 @@ class OriginalUnpackagedPreferencesImplementation : IPreferences
         if (_preferences.TryGetValue(CleanSharedName(sharedName), out var inner)
             && inner.TryGetValue(key, out var value) && value is not null)
         {
-            if (defaultValue is DateTime)
+            // From the type, not from the default value: Get<DateTime?>(key, null) has no DateTime default.
+            var type = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
+            if (type == typeof(DateTime))
             {
                 // long for the .NET 9+ format
                 if (long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var longValue))
@@ -251,7 +257,7 @@ class OriginalUnpackagedPreferencesImplementation : IPreferences
                 if (DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var datetimeValue))
                     return (T)(object)datetimeValue;
             }
-            else if (defaultValue is DateTimeOffset)
+            else if (type == typeof(DateTimeOffset))
             {
                 if (DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateTimeOffset))
                     return (T)(object)dateTimeOffset;
@@ -261,7 +267,6 @@ class OriginalUnpackagedPreferencesImplementation : IPreferences
                 try
                 {
                     // Get<int?> & co: convert to the underlying type.
-                    var type = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
                     return (T)Convert.ChangeType(value, type, CultureInfo.InvariantCulture);
                 }
                 catch (Exception ex) when (ex is InvalidCastException or FormatException or OverflowException)
@@ -340,7 +345,49 @@ class OriginalUnpackagedPreferencesImplementation : IPreferences
         }
     }
 
+    // Saves are coalesced: a burst of Set/Remove (a loop, a settings page) writes the file once, off the calling thread,
+    // SaveDelay after the first change. Pending changes are written when the process exits.
+    internal static TimeSpan SaveDelay { get; set; } = TimeSpan.FromMilliseconds(100);
+    bool _savePending;
+    bool _exitHooked;
+
     void Save()
+    {
+        lock (_locker)
+        {
+            if (!_exitHooked)
+            {
+                _exitHooked = true;
+                AppDomain.CurrentDomain.ProcessExit += (_, _) => Flush();
+            }
+            if (_savePending)
+                return;
+            _savePending = true;
+        }
+        _ = Task.Delay(SaveDelay).ContinueWith(_ => Flush(), TaskScheduler.Default);
+    }
+
+    /// <summary>Writes the pending changes now.</summary>
+    internal void Flush()
+    {
+        lock (_locker)
+        {
+            if (!_savePending)
+                return;
+            _savePending = false;
+            try
+            {
+                SaveNow();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // No caller to report to any more: the next change retries.
+                Console.Error.WriteLine($"Essentieables: preferences could not be saved: {ex.Message}");
+            }
+        }
+    }
+
+    void SaveNow()
     {
         lock (_locker)
         {

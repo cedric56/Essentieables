@@ -1,5 +1,6 @@
 ﻿
 
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text.Json.Serialization;
@@ -35,8 +36,14 @@ public class ContactsResponseInterop
 
 public class AddressInterop
 {
+    [JsonPropertyName("house_number")]
+    public string? HouseNumber { get; set; }
+
     [JsonPropertyName("road")]
     public string? Road { get; set; }
+
+    [JsonPropertyName("suburb")]
+    public string? Suburb { get; set; }
 
     [JsonPropertyName("hamlet")]
     public string? Hamlet { get; set; }
@@ -75,7 +82,13 @@ public class AddressInterop
     public string? Country { get; set; }
 
     [JsonPropertyName("country_code")]
-    public string? CcountryCode { get; set; }
+    public string? CountryCode { get; set; }
+
+    /// <summary>Former, misspelled name of <see cref="CountryCode"/>.</summary>
+    [JsonIgnore]
+    [Obsolete("Use CountryCode.")]
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+    public string? CcountryCode { get => CountryCode; set => CountryCode = value; }
 }
 
 public class PlacemarkResponseInterop

@@ -126,7 +126,10 @@ internal sealed class BlazorPreferences : IPreferences
         {
             EnsureLoaded();
             if (_loaded)
+            {
+                await WatchOtherTabsAsync().ConfigureAwait(false);
                 return;
+            }
 
             var all = await BlazorEssentials.Module.InvokeAsync<Dictionary<string, string>>("prefsGetAll", KeyPrefix)
                 .ConfigureAwait(false);
@@ -136,6 +139,7 @@ internal sealed class BlazorPreferences : IPreferences
                 if (!_loaded)
                     Load(all ?? []);
             }
+            await WatchOtherTabsAsync().ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is JSException or InvalidOperationException or TaskCanceledException or System.Text.Json.JsonException)
         {
@@ -146,6 +150,46 @@ internal sealed class BlazorPreferences : IPreferences
             ReplayDeferred();
         }
     }
+
+    private DotNetObjectReference<BlazorPreferences>? _storageWatch;
+
+    /// <summary>
+    /// Keeps the cache in step with the other tabs of the app (the <c>storage</c> event): without it, a value written by
+    /// another tab after the load would never be read here.
+    /// </summary>
+    private async Task WatchOtherTabsAsync()
+    {
+        if (_storageWatch is not null)
+            return;
+        var reference = DotNetObjectReference.Create(this);
+        _storageWatch = reference;
+        try
+        {
+            await BlazorEssentials.Module.InvokeVoidAsync("prefsWatch", reference, KeyPrefix).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is JSException or InvalidOperationException or TaskCanceledException or JSDisconnectedException)
+        {
+            System.Diagnostics.Debug.WriteLine(ex);
+            _storageWatch = null;
+            reference.Dispose();
+        }
+    }
+
+    /// <summary>A preference written or removed by another tab.</summary>
+    [JSInvokable]
+    public void OnStorageChanged(string key, string? value)
+    {
+        if (!key.StartsWith(KeyPrefix, StringComparison.Ordinal))
+            return;
+        if (value is null)
+            _cache.TryRemove(key, out _);
+        else
+            _cache[key] = value;
+    }
+
+    /// <summary>localStorage cleared by another tab.</summary>
+    [JSInvokable]
+    public void OnStorageCleared() => _cache.Clear();
 
     private void ReplayDeferred()
     {
@@ -183,16 +227,17 @@ internal sealed class BlazorPreferences : IPreferences
         var prefix = GetContainer(sharedName);
         if (!_loaded)
         {
-            // Entries not loaded yet are cleared in localStorage and skipped by the load.
+            // Entries not loaded yet are skipped by the load.
             _clearedBeforeLoad[prefix] = 0;
-            TrackPersistence(() => PersistClearAsync(prefix));
         }
         foreach (var storageKey in _cache.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).ToList())
         {
             Touch(storageKey);
-            if (_cache.TryRemove(storageKey, out _))
-                TrackPersistence(() => PersistRemoveAsync(storageKey));
+            _cache.TryRemove(storageKey, out _);
         }
+        // By prefix in localStorage: the entries written by other tabs, and not in this cache, are removed too. The
+        // persistence operations run in call order, so a later Set is not undone.
+        TrackPersistence(() => PersistClearAsync(prefix));
     }
 
     public void Set<T>(string key, T value, string? sharedName = null)

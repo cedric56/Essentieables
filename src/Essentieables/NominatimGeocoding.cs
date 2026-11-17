@@ -46,10 +46,24 @@ public class NominatimGeocoding : IGeocoding
     static readonly Lazy<HttpClient> SharedClient = new(() =>
     {
         // The timeout is applied per attempt (see GetStringAsync).
-        var client = new HttpClient { Timeout = System.Threading.Timeout.InfiniteTimeSpan };
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("Essentieables/1.0 (+https://github.com/cedric56/Essentieables)");
-        return client;
+        // The User-Agent is set per request (UserAgent can be changed after the first use).
+        return new HttpClient { Timeout = System.Threading.Timeout.InfiniteTimeSpan };
     });
+
+    /// <summary>
+    /// The User-Agent sent when the <see cref="HttpClient"/> has none. The Nominatim policy asks every application to identify
+    /// itself: the default names the app (entry assembly name and version) before Essentieables, so that one app abusing the
+    /// public instance does not get every app blocked. Set it to your own value (app name and contact) if you can.
+    /// </summary>
+    public static string UserAgent { get; set; } = DefaultUserAgent();
+
+    static string DefaultUserAgent()
+    {
+        const string library = "Essentieables/1.0 (+https://github.com/cedric56/Essentieables)";
+        var entry = System.Reflection.Assembly.GetEntryAssembly()?.GetName();
+        var name = new string((entry?.Name ?? string.Empty).Where(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '-' or '_').ToArray());
+        return name.Length == 0 ? library : $"{name}/{entry!.Version?.ToString() ?? "1.0"} {library}";
+    }
 
     static readonly SemaphoreSlim PublicInstanceGate = new(1, 1);
     // Read and written under s_scheduleLock: PushBackPublicInstance runs outside PublicInstanceGate.
@@ -92,7 +106,11 @@ public class NominatimGeocoding : IGeocoding
 
             using var timeout = new CancellationTokenSource(Timeout);
             var token = timeout.Token;
-            using var response = await _client.GetAsync(url, HttpCompletionOption.ResponseContentRead, token).ConfigureAwait(false);
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            // Not in a browser: it sends its own User-Agent, and the header would only add a CORS preflight.
+            if (!OperatingSystem.IsBrowser() && _client.DefaultRequestHeaders.UserAgent.Count == 0)
+                request.Headers.TryAddWithoutValidation("User-Agent", UserAgent);
+            using var response = await _client.SendAsync(request, HttpCompletionOption.ResponseContentRead, token).ConfigureAwait(false);
             if ((response.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable) && attempt < MaxAttempts)
             {
                 var delay = GetRetryDelay(response, attempt);
@@ -177,9 +195,12 @@ public class NominatimGeocoding : IGeocoding
             new Placemark
             {
                 CountryName = address?.Country ?? string.Empty,
-                CountryCode = address?.CcountryCode?.ToUpperInvariant() ?? string.Empty,
+                CountryCode = address?.CountryCode?.ToUpperInvariant() ?? string.Empty,
                 Location = new Location(data.LatValue, data.LonValue),
                 FeatureName = address?.Road ?? data.Name ?? string.Empty,
+                Thoroughfare = address?.Road ?? string.Empty,
+                SubThoroughfare = address?.HouseNumber ?? string.Empty,
+                SubLocality = address?.Suburb ?? string.Empty,
                 Locality = address?.City ?? address?.Town ?? address?.Village ?? address?.Hamlet ?? string.Empty,
                 AdminArea = address?.State ?? string.Empty,
                 SubAdminArea = address?.County ?? string.Empty,

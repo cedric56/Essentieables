@@ -1,4 +1,4 @@
-
+﻿
 
 using System.Linq;
 using Xunit;
@@ -77,6 +77,8 @@ public class NominatimGeocodingTests
         Assert.Equal("FR", placemark.CountryCode);
         Assert.Equal("Nantes", placemark.Locality);
         Assert.Equal("Place Royale", placemark.FeatureName);
+        Assert.Equal("Place Royale", placemark.Thoroughfare);
+        Assert.Equal("1", placemark.SubThoroughfare);
         Assert.Equal("Pays de la Loire", placemark.AdminArea);
         Assert.Equal("Loire-Atlantique", placemark.SubAdminArea);
         Assert.Equal("44000", placemark.PostalCode);

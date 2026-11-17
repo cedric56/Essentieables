@@ -709,6 +709,23 @@ export function prefsGetAll(prefix) {
 	return result;
 }
 
+let prefsStorageHandler = null;
+
+/** Reports the preferences changed by the other tabs of the app (the storage event does not fire in the writing tab). */
+export function prefsWatch(dotNetRef, prefix) {
+	if (prefsStorageHandler)
+		window.removeEventListener("storage", prefsStorageHandler);
+	prefsStorageHandler = event => {
+		if (event.storageArea !== localStorage)
+			return;
+		if (event.key === null)
+			dotNetRef.invokeMethodAsync("OnStorageCleared").catch(() => { });
+		else if (event.key.startsWith(prefix))
+			dotNetRef.invokeMethodAsync("OnStorageChanged", event.key, event.newValue).catch(() => { });
+	};
+	window.addEventListener("storage", prefsStorageHandler);
+}
+
 export function prefsSet(key, value) { localStorage.setItem(key, value); }
 export function prefsRemove(key) { localStorage.removeItem(key); }
 export function prefsClear(prefix) {
@@ -1724,16 +1741,30 @@ export function sensorStop(kind) {
 // ---------- App package files (fetch relative to base URL) ----------
 
 /** Returns the file as a Blob (an IJSStreamReference in .NET), or null when it does not exist. */
+// The URL of a file of the app package; null when the resolved URL leaves the folder of <base href> (second check after
+// the one of BlazorFileSystem.NormalizePath).
+function appFileUrl(path) {
+	const base = new URL(".", globalThis.document.baseURI);
+	const url = new URL(path, base);
+	return url.origin === base.origin && url.pathname.startsWith(base.pathname) ? url : null;
+}
+
 export async function fetchAppFile(path) {
-	const response = await globalThis.fetch(new URL(path, globalThis.document.baseURI), { method: 'GET' });
+	const url = appFileUrl(path);
+	if (!url)
+		throw new Error(`InvalidPath: '${path}' is not a path inside the app package.`);
+	const response = await globalThis.fetch(url, { method: 'GET' });
 	if (!response.ok)
 		return null;
 	return await response.blob();
 }
 
 export async function appFileExists(path) {
+	const url = appFileUrl(path);
+	if (!url)
+		return false;
 	try {
-		const response = await globalThis.fetch(new URL(path, globalThis.document.baseURI), { method: 'HEAD' });
+		const response = await globalThis.fetch(url, { method: 'HEAD' });
 		return response.ok;
 	} catch {
 		return false;
@@ -1930,8 +1961,15 @@ export function authenticateCancel() {
 	cancelAuthentication?.();
 }
 
+// One sign-in at a time: both share the "webAuthenticator" popup, and the cancel callback above.
+const authenticationInProgress = () => new Error("InvalidOperation: An authentication is already in progress.");
+
 export function authenticate(url) {
 		return new Promise((resolve, reject) => {
+			if (cancelAuthentication) {
+				reject(authenticationInProgress());
+				return;
+			}
 			const popup = window.open(
 				"about:blank",
 				"webAuthenticator",
@@ -1955,16 +1993,18 @@ export function authenticate(url) {
 				if (finished) return;
 				finished = true;
 				cleanup();
-				cancelAuthentication = null;
+				if (cancelAuthentication === cancel)
+					cancelAuthentication = null;
 
 				if (error) reject(error);
 				else resolve(callbackUrl ?? null);
 			};
 
-			cancelAuthentication = () => {
+			const cancel = () => {
 				try { popup.close(); } catch { }
 				finish(new Error("Authentication canceled."));
 			};
+			cancelAuthentication = cancel;
 
 			const onMessage = (event) => {
 				if (event.origin !== window.location.origin)
@@ -2015,6 +2055,10 @@ export function authenticateDirect(url, callbackUrl) {
 			reject(new Error("The callback URL must be on the origin of the app (" + location.origin + ")."));
 			return;
 		}
+		if (cancelAuthentication) {
+			reject(authenticationInProgress());
+			return;
+		}
 
 		const popup = window.open(url, "webAuthenticator", "width=520,height=700");
 		if (!popup) {
@@ -2037,7 +2081,8 @@ export function authenticateDirect(url, callbackUrl) {
 		const finish = (error, result) => {
 			if (finished) return;
 			finished = true;
-			cancelAuthentication = null;
+			if (cancelAuthentication === cancel)
+				cancelAuthentication = null;
 			window.removeEventListener("message", onMessage);
 			clearInterval(poll);
 			clearTimeout(timeout);
@@ -2074,7 +2119,8 @@ export function authenticateDirect(url, callbackUrl) {
 		}, 250);
 
 		const timeout = setTimeout(() => finish(new Error("Authentication timed out.")), 300000);
-		cancelAuthentication = () => finish(new Error("Authentication canceled."));
+		const cancel = () => finish(new Error("Authentication canceled."));
+		cancelAuthentication = cancel;
 	});
 }
 

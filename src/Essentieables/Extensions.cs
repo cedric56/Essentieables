@@ -194,25 +194,48 @@ public static class Extensions
     }
 
     /// <summary>
-    /// Opens a readable stream for the specified file, using the Avae-specific implementation
-    /// when available, or falling back to the standard MAUI Essentials behavior.
+    /// Opens a readable stream for any file the pickers, the media picker or the screenshot return, on every platform.
+    /// Use it instead of <c>file.OpenReadAsync()</c> on a <see cref="FileBase"/> or <see cref="FileResult"/> variable: on the
+    /// portable MAUI build (Blazor, Avalonia.Browser, Avalonia on Linux and macOS, plain net10.0) MAUI's method is not
+    /// virtual and throws <c>NotImplementedInReferenceAssemblyException</c>.
     /// </summary>
     /// <param name="file">The file to open.</param>
-    /// <param name="overridesMauiPlatform">
-    /// Reserved for future use; does not currently affect behavior beyond selecting the Avae-specific path when available.
-    /// </param>
-    /// <returns>A task that resolves to a readable stream for the file's contents.</returns>
-    /// <exception cref="ArgumentNullException">Thrown if <paramref name="file"/> is <see langword="null"/>.</exception>
-    public static Task<Stream> OpenReadAsync(
-    this FileBase file,
-    bool overridesMauiPlatform = true)
+    /// <returns>A readable stream over the file's contents.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="file"/> is <see langword="null"/>.</exception>
+    public static Task<Stream> OpenReadSafeAsync(this FileBase file)
     {
         ArgumentNullException.ThrowIfNull(file);
 
-        if (overridesMauiPlatform && file is IAvaeFileResult avaeFileResult)
+        if (file is IAvaeFileResult avaeFileResult)
             return avaeFileResult.OpenFileStreamAsync();
 
-        return file.OpenReadAsync();
+        return OpenWithFallbackAsync(file);
+
+        static async Task<Stream> OpenWithFallbackAsync(FileBase file)
+        {
+            try
+            {
+                // Thrown synchronously or by the task, depending on the MAUI build: awaited inside the try for both.
+                return await file.OpenReadAsync().ConfigureAwait(false);
+            }
+            // NotImplementedInReferenceAssemblyException is internal to MAUI: matched by name.
+            catch (Exception ex) when (ex.GetType().Name == "NotImplementedInReferenceAssemblyException" && File.Exists(file.FullPath))
+            {
+                return new FileStream(file.FullPath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Same as <see cref="OpenReadSafeAsync(FileBase)"/>. Only reached with the argument (<c>file.OpenReadAsync(true)</c>):
+    /// <c>file.OpenReadAsync()</c> calls MAUI's instance method, which C# always prefers to an extension method.
+    /// </summary>
+    [Obsolete("file.OpenReadAsync() does not reach this extension (C# prefers MAUI's instance method): use OpenReadSafeAsync().")]
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+    public static Task<Stream> OpenReadAsync(this FileBase file, bool overridesMauiPlatform)
+    {
+        ArgumentNullException.ThrowIfNull(file);
+        return overridesMauiPlatform ? file.OpenReadSafeAsync() : file.OpenReadAsync();
     }
 
     /// <summary>
@@ -248,17 +271,9 @@ public static class Extensions
     }
 
     /// <summary>
-    /// Requests a native share of the specified files, using the Avae-specific implementation
-    /// when available, or converting the files to a standard <see cref="ShareMultipleFilesRequest"/> otherwise.
-    /// </summary>
-    /// <param name="share">The share service to request with.</param>
-    /// <param name="title">The title shown in the share dialog.</param>
-    /// <param name="files">The files to share.</param>
-    /// <returns>A task representing the asynchronous share operation.</returns>
-    /// <summary>
     /// The content type of <paramref name="file"/>, resolved from its extension when it has none. On the portable build of
     /// MAUI (net10.0: Blazor, Avalonia.Browser, plain net10.0 apps), <see cref="FileBase.ContentType"/> throws
-    /// <see cref="NotImplementedInReferenceAssemblyException"/> for a file created without an explicit content type
+    /// <c>NotImplementedInReferenceAssemblyException</c> for a file created without an explicit content type
     /// (<c>new ReadOnlyFile(path)</c>…): this never does.
     /// </summary>
     public static string GetContentTypeOrDefault(this FileBase file)
@@ -277,6 +292,14 @@ public static class Extensions
         return string.IsNullOrEmpty(contentType) ? ContentTypeResolver.Resolve(file.FileName) : contentType;
     }
 
+    /// <summary>
+    /// Requests a native share of the specified files, using the Avae-specific implementation
+    /// when available, or converting the files to a standard <see cref="ShareMultipleFilesRequest"/> otherwise.
+    /// </summary>
+    /// <param name="share">The share service to request with.</param>
+    /// <param name="title">The title shown in the share dialog.</param>
+    /// <param name="files">The files to share.</param>
+    /// <returns>A task representing the asynchronous share operation.</returns>
     public static Task RequestAsync(this IShare share, string title, IEnumerable<FileBase> files)
     {
         if (share is IAvaeShare avae)

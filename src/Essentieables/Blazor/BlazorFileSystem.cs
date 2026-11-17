@@ -123,15 +123,29 @@ internal class BlazorFileSystem : IFileSystem
     }
 
     /// <summary>
-    /// A path relative to the app base URL. An absolute URL ("https://other-site/…"), a scheme ("data:…") or a ".." segment
-    /// would read outside the app package: refused.
+    /// A path relative to the app base URL. An absolute URL ("https://other-site/…"), a scheme ("data:…") or a ".." segment,
+    /// percent-encoded or not (".%2e", "%2e.", "%2E%2E": the URL parser decodes them), would read outside the app package:
+    /// refused. So is an encoded separator ("%2f", "%5c"), which some servers decode.
     /// </summary>
     internal static string NormalizePath(string filename)
     {
         var path = filename.Replace('\\', '/').TrimStart('/');
-        if (path.Contains(':', StringComparison.Ordinal)
-            || path.Split('/').Any(segment => segment is ".." || segment.Equals("%2e%2e", StringComparison.OrdinalIgnoreCase)))
+        if (path.Contains(':', StringComparison.Ordinal) || path.Split('/').Any(IsUnsafeSegment))
             throw new ArgumentException($"'{filename}' is not a path inside the app package.", nameof(filename));
         return path;
+    }
+
+    static bool IsUnsafeSegment(string segment)
+    {
+        string decoded;
+        try
+        {
+            decoded = Uri.UnescapeDataString(segment);
+        }
+        catch (UriFormatException)
+        {
+            return true;
+        }
+        return decoded is ".." || decoded.Contains('/') || decoded.Contains('\\') || decoded.Contains(':');
     }
 }

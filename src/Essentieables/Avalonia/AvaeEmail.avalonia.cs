@@ -153,7 +153,8 @@ internal partial class AvaeEmail : IAvaeEmail
         }
     }
 
-    public bool IsComposeSupported => true;
+    /// <summary>Windows (shell), Linux (xdg-open) and macOS (open); false elsewhere, where ComposeAsync throws.</summary>
+    public bool IsComposeSupported => OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS();
 
     public Task ComposeAsync(EmailMessage? message) =>
         PlatformComposeAsync(message);

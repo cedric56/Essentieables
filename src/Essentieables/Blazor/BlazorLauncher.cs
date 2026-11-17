@@ -21,18 +21,13 @@ internal class BlazorLauncher : ILauncher
         {
             return await BlazorEssentials.Module.InvokeAsync<bool>("openUrl", url);
         }
-#if DEBUG
-        catch (Exception ex)
+        // The browser refused (popup blocker, invalid URL): false, as MAUI's launchers. Not initialized, a disconnected
+        // circuit or a cancellation are reported as exceptions, like every other API.
+        catch (JSException ex)
         {
             System.Diagnostics.Debug.WriteLine(ex);
             return false;
         }
-#else
-        catch
-        {
-            return false;
-        }
-#endif
     }
 
     internal static async Task<bool> NavigateToAsync(string url)
@@ -41,18 +36,13 @@ internal class BlazorLauncher : ILauncher
         {
             return await BlazorEssentials.Module.InvokeAsync<bool>("navigateTo", url);
         }
-#if DEBUG
-        catch (Exception ex)
+        // The browser refused (popup blocker, invalid URL): false, as MAUI's launchers. Not initialized, a disconnected
+        // circuit or a cancellation are reported as exceptions, like every other API.
+        catch (JSException ex)
         {
             System.Diagnostics.Debug.WriteLine(ex);
             return false;
         }
-#else
-        catch
-        {
-            return false;
-        }
-#endif
     }
 
     static readonly string[] WebSchemes = ["http", "https"];

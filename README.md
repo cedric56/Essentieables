@@ -216,12 +216,17 @@ registered in the services, so the app can inject `IJSRuntime` for its own scrip
 - **Storage locations.** As in MAUI and Avae.Windows.Essentials: `FileSystem.AppDataDirectory` is
   `%LOCALAPPDATA%\<Publisher>\<Package>\Data` (`…\Cache` for the cache, the `ApplicationData` folders when packaged),
   `Preferences` and `SecureStorage` are in the `Settings` folder next to it, and `Preferences` uses
-  `ApplicationData.LocalSettings` in a packaged (MSIX) app. Values written by the preview builds of Essentieables
+  `ApplicationData.LocalSettings` in a packaged (MSIX) app. Unpackaged, preference changes are written to the file once,
+  off the calling thread, 100 ms after the first change of a burst (and when the process exits); a `SecureStorage` change
+  that cannot be saved is undone and throws. Values written by the preview builds of Essentieables
   (`%APPDATA%\<Assembly>\Settings`) are read when those files do not exist yet. `OpenAppPackageFileAsync` reads the file
   next to the executable, then the Avalonia resource (`avares://`).
-- **Sign-in.** A `http://localhost:port/…` callback opens the sign-in page in the system browser and receives the callback
-  with an `HttpListener` (`AvaeWebAuthenticator.Timeout`, 5 minutes by default), as Avae.Windows.Essentials did: Google and
-  other providers refuse embedded web views. Other callbacks still use the Avalonia broker. The same applies on Linux and macOS.
+- **Sign-in.** A `http://localhost:port/…` or `http://127.0.0.1:port/…` callback opens the sign-in page in the system browser
+  and receives the callback on the loopback interface (`AvaeWebAuthenticator.Timeout`, 5 minutes by default; no URL
+  reservation or administrator rights needed), as Avae.Windows.Essentials did: Google and other providers refuse embedded web
+  views. **Put a random `state` in the sign-in URL** (and use PKCE): only a callback with the same `state` is accepted, so
+  another local process or a web page cannot complete the sign-in with its own code. Only `GET` callbacks are supported
+  (not `response_mode=form_post`). Other callbacks still use the Avalonia broker. The same applies on Linux and macOS.
 - **Screenshot.** `Screenshot.Default.CaptureAsync(window)` and `CaptureAsync(visual)` capture a given window or control
   (every Avalonia host).
 - `EssentieablesPlatform.OnLaunched(action)`, `OnActivated(topLevel)` and `OnPlatformWindowInitialized(window)` replace the
@@ -235,7 +240,7 @@ registered in the services, so the app can inject `IJSRuntime` for its own scrip
 - **Contacts.** `Contacts.Default.GetAllAsync()` reads the address book (`CNContactStore`); `NSContactsUsageDescription` is
   required. `PickContactAsync` is not supported on macOS.
 - **Sign-in.** `ASWebAuthenticationSession` for custom-scheme callbacks (no `Info.plist` entry needed), the system browser and
-  an `HttpListener` for `http://localhost` callbacks.
+  the loopback listener for `http://localhost` and `http://127.0.0.1` callbacks (see Windows).
 
 ### Migrating from Avae.Windows.Essentials, Avae.macOS.Essentials, Avae.Browser.Essentials
 
@@ -248,8 +253,8 @@ only replaces the implementations behind `Xxx.Default`.
    `await BlazorEssentials.InitializeAsync()`. Keep `-lidbfs.js` to find the files again.
 4. Static APIs that are not facades of MAUI: `MainThread` → `AvaeMainThread`, `Platform.OnLaunched/OnActivated` →
    `EssentieablesPlatform`, `Permissions.Xxx` → `AvaePermissions.Xxx` (Windows), `JSInterop` → `Essentieables.JSInterop` (browser).
-5. Files given by the pickers may not be backed by a path that MAUI can open: read them with `OpenReadAsync()` from
-   `Essentieables.Extensions`.
+5. Files given by the pickers may not be backed by a path that MAUI can open: read them with `OpenReadSafeAsync()` from
+   `Essentieables.Extensions` (the `OpenReadAsync()` extension of Avae.*.Essentials is hidden by MAUI's instance method).
 
 ---
 
@@ -323,7 +328,7 @@ results; a dismissed file picker or camera popup returns `null`.
 - `OpenAppPackageFileAsync` / `AppPackageFileExistsAsync` take a path relative to the app (Windows: to its folder); an
   absolute path or URL, a scheme or a `..` segment is refused (`ArgumentException`; `AppPackageFileExistsAsync` returns false).
 - Captured photos and videos are written to the cache directory too, so `FullPath` is a real file. Read
-  picked or captured files with `OpenReadAsync()` on the result (or `Extensions.OpenReadAsync`), or with
+  picked or captured files with `OpenReadSafeAsync()` (`Essentieables.Extensions`), or with
   `System.IO`; `FileResult.OpenReadAsync()` called through the base type is not implemented by the portable
   MAUI build.
 - `Launcher` only opens `http`, `https`, `mailto`, `tel` and `sms` URIs, in `CanOpenAsync` and `OpenAsync`
@@ -353,6 +358,8 @@ responsibility:
 
 The completion page posts its URL to the opener only on the same origin, and the opener accepts only
 messages from that origin and from the popup it opened.
+One sign-in runs at a time per tab: a second `AuthenticateAsync` while the popup is open throws
+`InvalidOperationException`.
 
 ---
 
@@ -412,7 +419,8 @@ What the JS implementations can do depends on the browser (sensors, vibration, c
    are reported by `BlazorSecureStorage.FlushAsync()`), and a `GetAsync`/`SetAsync` made after `RemoveAll` waits for it.
    The storage key is bound to each value (AES-GCM additional data); values written by earlier versions are still read.
 3. `%LOCALAPPDATA%\<Publisher>\<Package>` (`Data`, `Cache`, `Settings`), the `ApplicationData` folders in a packaged app.
-4. For `http://localhost:port/` callbacks (`HttpListener`); other callbacks use the second implementation.
+4. For `http://localhost:port/` and `http://127.0.0.1:port/` callbacks (loopback listener, `state` checked); other callbacks use
+   the second implementation.
 
 ---
 
@@ -422,7 +430,7 @@ What the JS implementations can do depends on the browser (sensors, vibration, c
 backed by a path on disk) and fall back to the standard MAUI behaviour otherwise:
 
 ```csharp
-using var stream = await fileResult.OpenReadAsync();              // any FileBase
+using var stream = await fileResult.OpenReadSafeAsync();          // any FileBase
 await Email.Default.ComposeAsync(files, new EmailMessage { … });   // attach FileBase files
 await Share.Default.RequestAsync("Title", files);                  // share FileBase files
 ```
@@ -434,8 +442,9 @@ await Share.Default.RequestAsync("Title", files);                  // share File
 
 ## Known limitations
 
-- **Blazor Preferences:** writes are persisted to `localStorage` in the background; a tab closed right
-  after a `Set` can lose it. `BlazorPreferences.FlushAsync()` waits for the pending writes and reports their
+- **Blazor Preferences:** writes are persisted to `localStorage` in the background, in call order; a tab closed right
+  after a `Set` can lose it. Changes made by the other tabs of the app are applied to the cache (`storage` event), and
+  `Clear()` removes the keys they wrote too. `BlazorPreferences.FlushAsync()` waits for the pending writes and reports their
   failures. As in MAUI, only `string`, `bool`, `int`, `long`, `float`, `double`, `DateTime` and
   `DateTimeOffset` are supported; other types throw `NotSupportedException`.
 - **Blazor file dialog:** a dialog closed without a choice is detected with the `cancel` event of the
@@ -443,9 +452,12 @@ await Share.Default.RequestAsync("Title", files);                  // share File
   back without a file (after about a second).
 - **`FileResult.OpenReadAsync()` on the portable MAUI build** (Blazor, Avalonia.Browser, plain `net10.0`): MAUI's
   method is not virtual and throws `NotImplementedInReferenceAssemblyException` when called through the `FileResult`
-  type, as in `await (await FilePicker.PickAsync()).OpenReadAsync()`. Use the `OpenReadAsync()` extension of
-  `Essentieables.Extensions` (`using Essentieables;`), which works for every file the pickers return.
+  type, as in `await (await FilePicker.PickAsync()).OpenReadAsync()`. Use the `OpenReadSafeAsync()` extension of
+  `Essentieables.Extensions` (`using Essentieables;`), which works for every file the pickers return. (An extension named
+  `OpenReadAsync()` would never be called: C# always prefers MAUI's instance method.)
   `GetContentTypeOrDefault()` likewise reads the content type of a file created without one.
+- **Launcher in the browser:** `OpenAsync` returns false when the browser refuses (popup blocker); a missing
+  `InitializeAsync`, a disconnected circuit or a cancellation throw, as with the other APIs.
 - **User activation (Blazor Server):** `window.open` (Browser, Map, Launcher), `navigator.share`, the contact picker,
   the motion permission of iOS and the clipboard need a user gesture. In Blazor Server the call reaches the browser after
   a SignalR round trip, often too late: they then throw `PermissionException` (or return false for the Launcher). Prefer
@@ -476,7 +488,10 @@ await Share.Default.RequestAsync("Title", files);                  // share File
 - **Geocoding** calls the public Nominatim instance by default: respect its
   [usage policy](https://operations.osmfoundation.org/policies/nominatim/). Requests to it are spaced by
   `NominatimGeocoding.MinimumInterval` (one second, process-wide), time out after
-  `NominatimGeocoding.Timeout` and 429/503 answers are retried after their `Retry-After` delay. Browsers send
+  `NominatimGeocoding.Timeout` and 429/503 answers are retried after their `Retry-After` delay. The User-Agent names your
+  app (entry assembly name and version) before Essentieables; set `NominatimGeocoding.UserAgent` to identify it better
+  (name and contact), as the policy asks. Placemarks have `Thoroughfare` (road), `SubThoroughfare` (house number) and
+  `SubLocality` (suburb). Browsers send
   their own User-Agent: in a WebAssembly app, use your own instance or a server-side proxy.
 
 ---

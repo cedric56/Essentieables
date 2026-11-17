@@ -13,6 +13,7 @@ using Microsoft.Maui.Networking;
 using Microsoft.Maui.Storage;
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -569,14 +570,38 @@ internal sealed class BlazorEssentialsSession : IAsyncDisposable
         return path;
     }
 
-    // Server: <temp>/essentieables/<process id>/<session id>, readable by the account of the server only (0700 on Unix,
-    // where /tmp is shared), and the folders left by a process that crashed are deleted on the first use.
-    static readonly Lazy<string> s_serverRoot = new(() =>
+    // Server: <temp>/essentieables[-<user>]/<process id>/<session id>, readable by the account of the server only (0700 on
+    // Unix, where /tmp is shared), and the folders left by a process that crashed are deleted on the first use.
+    // On Unix the folder is per account, so two server accounts do not share it; if it was taken by another account
+    // anyway, a random private folder is used instead of failing. A failure is not cached (PublicationOnly): the next use
+    // retries.
+    static readonly Lazy<string> s_serverRoot = new(CreateServerRoot, LazyThreadSafetyMode.PublicationOnly);
+
+    static string CreateServerRoot()
     {
-        var parent = CreatePrivateDirectory(Path.Combine(Path.GetTempPath(), "essentieables"));
+        var processName = Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        string parent;
+        try
+        {
+            parent = CreatePrivateDirectory(Path.Combine(Path.GetTempPath(), ServerRootName()));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            System.Diagnostics.Debug.WriteLine(ex);
+            // Created 0700 by the runtime on Unix; nothing to purge in a new folder.
+            return CreatePrivateDirectory(Path.Combine(Directory.CreateTempSubdirectory("essentieables-").FullName, processName));
+        }
         PurgeOrphans(parent);
-        return CreatePrivateDirectory(Path.Combine(parent, Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture)));
-    });
+        return CreatePrivateDirectory(Path.Combine(parent, processName));
+    }
+
+    static string ServerRootName()
+    {
+        if (OperatingSystem.IsWindows())
+            return "essentieables"; // %TEMP% is per user.
+        var user = new string(Environment.UserName.Select(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.' ? c : '_').ToArray());
+        return string.IsNullOrEmpty(user) || user.Trim('.').Length == 0 ? "essentieables" : "essentieables-" + user;
+    }
 
     static string CreatePrivateDirectory(string path)
     {

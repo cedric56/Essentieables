@@ -178,8 +178,9 @@ class OriginalUnpackagedSecureStorageImplementation
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                // Unreadable for now (locked, permissions): saving would lose its content, so refuse to.
-                _unreadable = true;
+                // Unreadable for now (locked, permissions): saving would lose its content, so refuse to. (A preview file
+                // that cannot be read is not overwritten anyway: the new file has another path.)
+                _unreadable = path == AppSecureStoragePath;
                 Console.Error.WriteLine($"Essentieables: secure storage could not be read: {ex.Message}");
             }
         }
@@ -188,24 +189,69 @@ class OriginalUnpackagedSecureStorageImplementation
     // Set when the file exists but could not be read: saving would replace it with the new keys only.
     private bool _unreadable;
 
-    private void Save()
+    /// <summary>
+    /// Reads the file again after a failed load (a lock by an antivirus or a sync client is usually short). Nothing was
+    /// changed in memory meanwhile, since every change is refused while the file is unreadable.
+    /// </summary>
+    private bool TryRecover()
     {
-        if (_unreadable)
+        if (!_unreadable)
+            return true;
+        try
+        {
+            SecureStorageDictionary? loaded;
+            using (var stream = File.OpenRead(AppSecureStoragePath))
+                loaded = JsonSerializer.Deserialize(stream, SecureStorageJsonSerializerContext.Default.SecureStorageDictionary);
+            _secureStorage.Clear();
+            foreach (var pair in loaded ?? new())
+                _secureStorage[pair.Key] = pair.Value;
+            _unreadable = false;
+            return true;
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
+            _unreadable = false;
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            Console.Error.WriteLine($"Essentieables: secure storage still unreadable: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Applies a change and saves it; when the file cannot be read or written, the change is undone and the error thrown,
+    /// so a later <see cref="GetAsync"/> never returns a value that was not saved.
+    /// </summary>
+    private void Commit(Action apply, Action rollback)
+    {
+        if (!TryRecover())
             throw new IOException($"The secure storage file '{AppSecureStoragePath}' could not be read; it is not overwritten.");
 
-        // Through a temporary file of the same folder: a crash while writing never exposes a partially serialized file.
-        AtomicFile.Write(AppSecureStoragePath, stream =>
-            JsonSerializer.Serialize(
-                stream,
-                _secureStorage,
-                SecureStorageJsonSerializerContext.Default
-                    .SecureStorageDictionary));
+        apply();
+        try
+        {
+            // Through a temporary file of the same folder: a crash while writing never exposes a partially serialized file.
+            AtomicFile.Write(AppSecureStoragePath, stream =>
+                JsonSerializer.Serialize(
+                    stream,
+                    _secureStorage,
+                    SecureStorageJsonSerializerContext.Default
+                        .SecureStorageDictionary));
+        }
+        catch
+        {
+            rollback();
+            throw;
+        }
     }
 
     public Task<byte[]?> GetAsync(string key)
     {
         lock (_gate)
         {
+            TryRecover();
             _secureStorage.TryGetValue(key, out var value);
             return Task.FromResult(value);
         }
@@ -218,8 +264,16 @@ class OriginalUnpackagedSecureStorageImplementation
 
         lock (_gate)
         {
-            _secureStorage[key] = value;
-            Save();
+            var existed = _secureStorage.TryGetValue(key, out var previous);
+            Commit(
+                () => _secureStorage[key] = value,
+                () =>
+                {
+                    if (existed)
+                        _secureStorage[key] = previous!;
+                    else
+                        _secureStorage.TryRemove(key, out _);
+                });
         }
 
         return Task.CompletedTask;
@@ -229,24 +283,39 @@ class OriginalUnpackagedSecureStorageImplementation
     {
         lock (_gate)
         {
-            var removed = _secureStorage.TryRemove(key, out _);
+            if (!TryRecover() || !_secureStorage.TryGetValue(key, out var previous))
+                return TryRemoveWhileUnreadable();
 
-            if (removed)
-                Save();
-
-            return removed;
+            Commit(() => _secureStorage.TryRemove(key, out _), () => _secureStorage[key] = previous);
+            return true;
         }
     }
+
+    // The file could not be read: the key may be in it, but it cannot be removed without losing the other keys.
+    private bool TryRemoveWhileUnreadable() =>
+        _unreadable
+            ? throw new IOException($"The secure storage file '{AppSecureStoragePath}' could not be read; it is not overwritten.")
+            : false;
 
     public void RemoveAll()
     {
         lock (_gate)
         {
-            if (_secureStorage.IsEmpty)
+            if (!_unreadable && _secureStorage.IsEmpty)
                 return;
 
-            _secureStorage.Clear();
-            Save();
+            // RemoveAll needs no previous content: an unreadable file is replaced by an empty one.
+            var snapshot = _secureStorage.ToArray();
+            var wasUnreadable = _unreadable;
+            _unreadable = false;
+            Commit(
+                () => _secureStorage.Clear(),
+                () =>
+                {
+                    _unreadable = wasUnreadable;
+                    foreach (var pair in snapshot)
+                        _secureStorage[pair.Key] = pair.Value;
+                });
         }
     }
 }

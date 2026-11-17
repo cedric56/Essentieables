@@ -185,6 +185,9 @@ internal static class AvaeEmailExtensions
         else
         {
             AppendLine(builder, $"Content-Type: text/plain; charset=utf-8");
+            // A header: it must come before the empty line that ends the headers.
+            if (!string.IsNullOrEmpty(message.Body))
+                AppendLine(builder, $"Content-Transfer-Encoding: quoted-printable");
         }
 
         // IMPORTANT: Empty line separating headers from body
@@ -282,9 +285,7 @@ internal static class AvaeEmailExtensions
         }
         else if (!string.IsNullOrEmpty(message.Body))
         {
-            // Simple text message
-            AppendLine(builder, $"Content-Transfer-Encoding: quoted-printable");
-            AppendLine(builder);
+            // Simple text message (Content-Transfer-Encoding is in the headers above)
             builder.Append(EncodeQuotedPrintable(message.Body));
             AppendLine(builder);
         }
