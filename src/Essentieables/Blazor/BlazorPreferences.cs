@@ -27,6 +27,13 @@ internal sealed class BlazorPreferences : IPreferences
     private readonly ConcurrentQueue<Exception> _persistenceErrors = new();
     private long _nextOperationId;
 
+    // Writes made before the JS module is available (Program.cs, prerendering, VersionTracking.Track…): kept in order and
+    // replayed once InitializeAsync has the module, instead of failing and never reaching localStorage.
+    private readonly List<Func<Task>> _deferred = new();
+
+    /// <summary>Raised once the stored values are loaded (synchronously or by <see cref="InitializeAsync"/>).</summary>
+    internal event Action? Loaded;
+
 
     internal const string KeyPrefix = "maui:prefs:";
 
@@ -59,6 +66,13 @@ internal sealed class BlazorPreferences : IPreferences
         _synchronousLoader = synchronousLoader;
     }
 
+    /// <summary>Loads synchronously when a loader was given; true when the stored values are loaded.</summary>
+    internal bool TryEnsureLoaded()
+    {
+        EnsureLoaded();
+        return _loaded;
+    }
+
     private void EnsureLoaded()
     {
         if (_loaded || _synchronousLoader is not { } loader)
@@ -83,6 +97,7 @@ internal sealed class BlazorPreferences : IPreferences
         _loaded = true;
         _touchedBeforeLoad.Clear();
         _clearedBeforeLoad.Clear();
+        Loaded?.Invoke();
     }
 
     private void Touch(string storageKey)
@@ -122,17 +137,28 @@ internal sealed class BlazorPreferences : IPreferences
                     Load(all ?? []);
             }
         }
-#if DEBUG
-        catch (Exception ex)
+        catch (Exception ex) when (ex is JSException or InvalidOperationException or TaskCanceledException or System.Text.Json.JsonException)
         {
             System.Diagnostics.Debug.WriteLine(ex);
         }
-#else
-        catch
+        finally
         {
-
+            ReplayDeferred();
         }
-#endif
+    }
+
+    private void ReplayDeferred()
+    {
+        if (!BlazorEssentials.IsInitialized)
+            return;
+        Func<Task>[] operations;
+        lock (_pendingLock)
+        {
+            operations = _deferred.ToArray();
+            _deferred.Clear();
+        }
+        foreach (var operation in operations)
+            TrackPersistence(operation);
     }
 
     public bool ContainsKey(string key, string? sharedName = null)
@@ -283,6 +309,12 @@ internal sealed class BlazorPreferences : IPreferences
     {
         lock (_pendingLock)
         {
+            if (!BlazorEssentials.IsInitialized)
+            {
+                _deferred.Add(operation);
+                return;
+            }
+
             var id = ++_nextOperationId;
             var task = ExecutePersistenceAsync(operation);
 

@@ -21,46 +21,37 @@ internal class BlazorClipboard : IClipboard
 
     public event EventHandler<EventArgs>? ClipboardContentChanged;
 
+    /// <summary>Throws <see cref="PermissionException"/> when the browser refuses (permission, no user gesture).</summary>
     public async Task SetTextAsync(string? text)
     {
         try
-        { 
-        await BlazorEssentials.Module.InvokeVoidAsync("clipboardWriteText", text ?? string.Empty).ConfigureAwait(false);
+        {
+            await BlazorEssentials.Module.InvokeVoidAsync("clipboardWriteText", text ?? string.Empty).ConfigureAwait(false);
+        }
+        catch (JSException ex) when (BlazorEssentials.MapJSException(ex, "The clipboard") is { } mapped)
+        {
+            throw mapped;
+        }
         lastKnownHasText = !string.IsNullOrEmpty(text);
         ClipboardContentChanged?.Invoke(this, EventArgs.Empty);
-        }
-#if DEBUG
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine(ex);
-        }
-#else
-        catch
-        {
-
-        }
-#endif
     }
 
+    /// <summary>
+    /// The text of the clipboard, null when it has none (as with MAUI). Throws <see cref="PermissionException"/> when the
+    /// browser refuses to read it.
+    /// </summary>
     public async Task<string?> GetTextAsync()
     {
+        string? text;
         try
-        { 
-            var text = await BlazorEssentials.Module.InvokeAsync<string?>("clipboardReadText").ConfigureAwait(false);
-            lastKnownHasText = !string.IsNullOrEmpty(text);
-            return string.IsNullOrEmpty(text) ? null : text;
-        }
-#if DEBUG
-        catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine(ex);
-            return string.Empty;
+            text = await BlazorEssentials.Module.InvokeAsync<string?>("clipboardReadText").ConfigureAwait(false);
         }
-#else
-        catch
+        catch (JSException ex) when (BlazorEssentials.MapJSException(ex, "The clipboard") is { } mapped)
         {
-            return string.Empty;
+            throw mapped;
         }
-#endif
+        lastKnownHasText = !string.IsNullOrEmpty(text);
+        return string.IsNullOrEmpty(text) ? null : text;
     }
 }

@@ -12,7 +12,9 @@ facades (`Geolocation.Default`, `Preferences.Default`, …), and run unchanged o
 
 Essentieables does not redefine any contract. It plugs implementations into the MAUI facades and
 registers the same instances in `IServiceCollection`, so `Geolocation.Default` and an injected
-`IGeolocation` are the same object.
+`IGeolocation` are the same object. Exception: a service the app registered itself before calling `UseEssentieables`
+is kept in the container (`TryAdd`), while the facade gets the Essentieables implementation; register yours after, or
+set the facade too, if both must agree.
 
 ---
 
@@ -319,8 +321,8 @@ results; a dismissed file picker or camera popup returns `null`.
   `System.IO`; `FileResult.OpenReadAsync()` called through the base type is not implemented by the portable
   MAUI build.
 - `Launcher` only opens `http`, `https`, `mailto`, `tel` and `sms` URIs, in `CanOpenAsync` and `OpenAsync`
-  alike. HTML, SVG, XML and script files given to `Launcher.OpenAsync(OpenFileRequest)` are downloaded rather
-  than opened, because a `blob:` URL runs with the origin of the app.
+  alike. `Launcher.OpenAsync(OpenFileRequest)` opens only raster images, PDF, plain text, audio and video; every other
+  file (HTML, SVG, XML, RSS…) is downloaded rather than opened, because a `blob:` URL runs with the origin of the app.
 
 ### Web authenticator
 
@@ -430,8 +432,22 @@ await Share.Default.RequestAsync("Title", files);                  // share File
   failures. As in MAUI, only `string`, `bool`, `int`, `long`, `float`, `double`, `DateTime` and
   `DateTimeOffset` are supported; other types throw `NotSupportedException`.
 - **Blazor file dialog:** a dialog closed without a choice is detected with the `cancel` event of the
-  input (Chrome 113+, Firefox 91+, Safari 16.4+). On older browsers, `PickAsync` does not return until a file
-  is chosen.
+  input (Chrome 113+, Firefox 91+, Safari 16.4+). On older browsers it is deduced when the page gets the focus
+  back without a file (after about a second).
+- **`FileResult.OpenReadAsync()` on the portable MAUI build** (Blazor, Avalonia.Browser, plain `net10.0`): MAUI's
+  method is not virtual and throws `NotImplementedInReferenceAssemblyException` when called through the `FileResult`
+  type, as in `await (await FilePicker.PickAsync()).OpenReadAsync()`. Use the `OpenReadAsync()` extension of
+  `Essentieables.Extensions` (`using Essentieables;`), which works for every file the pickers return.
+  `GetContentTypeOrDefault()` likewise reads the content type of a file created without one.
+- **User activation (Blazor Server):** `window.open` (Browser, Map, Launcher), `navigator.share`, the contact picker,
+  the motion permission of iOS and the clipboard need a user gesture. In Blazor Server the call reaches the browser after
+  a SignalR round trip, often too late: they then throw `PermissionException` (or return false for the Launcher). Prefer
+  Blazor WebAssembly or Avalonia.Browser for those, or call them directly from a click handler.
+- **Blazor writes before `InitializeAsync`:** preferences written before the module is loaded are kept in order and
+  written to `localStorage` once it is; `VersionTracking.Track()` called that early runs as soon as the preferences are
+  loaded.
+- **Geocoding on Blazor Server:** the public Nominatim instance allows about one request per second for the whole server;
+  use your own instance for more than a few users.
 - **Fire-and-forget APIs in the browser** (`Vibrate`, `HapticFeedback.Perform`, `Announce`, `PhoneDialer.Open`, sensors'
   `Start`) validate their arguments and support synchronously, so `FeatureNotSupportedException` & co reach the caller as
   with MAUI; a failure of the browser afterwards is written to the console. A sensor the browser refuses to start (iOS

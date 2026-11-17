@@ -255,6 +255,27 @@ public static class Extensions
     /// <param name="title">The title shown in the share dialog.</param>
     /// <param name="files">The files to share.</param>
     /// <returns>A task representing the asynchronous share operation.</returns>
+    /// <summary>
+    /// The content type of <paramref name="file"/>, resolved from its extension when it has none. On the portable build of
+    /// MAUI (net10.0: Blazor, Avalonia.Browser, plain net10.0 apps), <see cref="FileBase.ContentType"/> throws
+    /// <see cref="NotImplementedInReferenceAssemblyException"/> for a file created without an explicit content type
+    /// (<c>new ReadOnlyFile(path)</c>…): this never does.
+    /// </summary>
+    public static string GetContentTypeOrDefault(this FileBase file)
+    {
+        ArgumentNullException.ThrowIfNull(file);
+        string? contentType;
+        try
+        {
+            contentType = file.ContentType;
+        }
+        catch (NotImplementedInReferenceAssemblyException)
+        {
+            contentType = null;
+        }
+        return string.IsNullOrEmpty(contentType) ? ContentTypeResolver.Resolve(file.FileName) : contentType;
+    }
+
     public static Task RequestAsync(this IShare share, string title, IEnumerable<FileBase> files)
     {
         if (share is IAvaeShare avae)
@@ -267,7 +288,8 @@ public static class Extensions
             return share.RequestAsync(new ShareMultipleFilesRequest()
             {
                 Title = title,
-                Files = [.. (files ?? []).Select(f => new ShareFile(f))]
+                // Not new ShareFile(f): its copy reads ContentType, which throws on the portable build without one.
+                Files = [.. (files ?? []).Select(f => new ShareFile(f.FullPath, f.GetContentTypeOrDefault()))]
             });
         }
     }

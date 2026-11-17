@@ -43,13 +43,15 @@ internal class BlazorMap(BlazorBrowser browser) : IMap
     public async Task OpenAsync(double latitude, double longitude, MapLaunchOptions options)
     {
         var url = BuildUrl(latitude, longitude, Required(options));
-        await browser.OpenAsync(url);
+        if (!await browser.OpenAsync(url))
+            throw new InvalidOperationException("The map could not be opened (popup blocked, or not called during a user gesture).");
     }
 
     public async Task OpenAsync(Placemark placemark, MapLaunchOptions options)
     {
         var url = BuildUrl(Required(placemark), Required(options));
-        await browser.OpenAsync(url);
+        if (!await browser.OpenAsync(url))
+            throw new InvalidOperationException("The map could not be opened (popup blocked, or not called during a user gesture).");
     }
 
     public async Task<bool> TryOpenAsync(double latitude, double longitude, MapLaunchOptions options)

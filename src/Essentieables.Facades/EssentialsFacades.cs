@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Diagnostics.CodeAnalysis;
@@ -242,6 +242,25 @@ internal class ForwardingFacade<TFacade, TService> : DispatchProxy
     protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
     {
         ArgumentNullException.ThrowIfNull(targetMethod);
+
+        // Unsubscribing (Connectivity.ConnectivityChanged -= h…) in a Dispose that runs while the circuit closes, where no
+        // session flows any more: there is nothing left to unsubscribe from (the session's services go away with it), so it is
+        // a no-op instead of an exception that would break the disposal.
+        if (targetMethod.IsSpecialName && targetMethod.Name.StartsWith("remove_", StringComparison.Ordinal))
+        {
+            TService? current;
+            try
+            {
+                current = EssentialsFacades.CurrentServices?.GetService(typeof(TService)) as TService;
+            }
+            catch (ObjectDisposedException)
+            {
+                current = null;
+            }
+            if (current is null)
+                return null;
+        }
+
         var target = EssentialsFacades.Resolve<TService>();
         if (!targetMethod.DeclaringType!.IsInstanceOfType(target))
             throw new NotSupportedException(

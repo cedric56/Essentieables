@@ -141,6 +141,7 @@ internal static class BlazorEssentials
         var geolocation = new BlazorGeolocation();
         var gyroscope = new BlazorGyroscope();
         var hapticFeedback = new BlazorHapticFeedback();
+        var magnetometer = new BlazorMagnetometer();
         var mediaPicker = new BlazorMediaPicker();
         var orientationSensor = new BlazorOrientationSensor();
         var share = new BlazorShare();
@@ -168,7 +169,7 @@ internal static class BlazorEssentials
             gyroscope,
             hapticFeedback,
             new BlazorLauncher(),
-            new BlazorMagnetometer(),
+            magnetometer,
             new BlazorMap(browser),
             mediaPicker,
             orientationSensor,
@@ -200,6 +201,7 @@ internal static class BlazorEssentials
             [typeof(IDeviceInfo)] = deviceInfo,
             [typeof(IGeolocation)] = geolocation,
             [typeof(IGyroscope)] = gyroscope,
+            [typeof(IMagnetometer)] = magnetometer,
             [typeof(IHapticFeedback)] = hapticFeedback,
             [typeof(IMediaPicker)] = mediaPicker,
             [typeof(IOrientationSensor)] = orientationSensor,
@@ -370,6 +372,26 @@ internal static class BlazorEssentials
             TaskScheduler.Default);
     }
 
+    /// <summary>
+    /// The MAUI exception for a JS failure, from the DOMException name the module puts in the message:
+    /// "unsupported" → <see cref="FeatureNotSupportedException"/>, NotAllowedError/SecurityError/"not-allowed" →
+    /// <see cref="PermissionException"/> (permission denied, or no user gesture: in Blazor Server the call arrives after a
+    /// SignalR round trip, often outside the gesture). Null when it is something else, which then propagates as is.
+    /// </summary>
+    internal static Exception? MapJSException(JSException ex, string feature)
+    {
+        var message = ex.Message;
+        if (message.Contains("unsupported", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("NotSupportedError", StringComparison.Ordinal))
+            return new FeatureNotSupportedException($"{feature} is not available in this browser.", ex);
+        if (message.Contains("NotAllowedError", StringComparison.Ordinal)
+            || message.Contains("SecurityError", StringComparison.Ordinal)
+            || message.Contains("not-allowed", StringComparison.Ordinal))
+            return new PermissionException(
+                $"{feature} was refused by the browser (permission denied, or not called during a user gesture such as a click).");
+        return null;
+    }
+
     static InvalidOperationException NotInitialized() => new(
 #if ESSENTIEABLES_AVALONIA_BROWSER
         "Essentieables is not initialized yet. Await 'BlazorEssentials.InitializeAsync()' (started by UseEssentieables()) " +
@@ -462,6 +484,8 @@ internal static class BlazorEssentials
             await compass.InitializeAsync();
         if (provider.GetService<IOrientationSensor>() is BlazorOrientationSensor orientation)
             await orientation.InitializeAsync();
+        if (provider.GetService<IMagnetometer>() is BlazorMagnetometer magnetometer)
+            await magnetometer.InitializeAsync();
         if (provider.GetService<IShare>() is BlazorShare share)
             await share.InitializeAsync();
         if (provider.GetService<IMediaPicker>() is BlazorMediaPicker mediaPicker)
@@ -537,11 +561,86 @@ internal sealed class BlazorEssentialsSession : IAsyncDisposable
     internal string GetDirectory(string name)
     {
         var root = _rootDirectory ??= BlazorEssentials.IsServer
-            ? Path.Combine(Path.GetTempPath(), "essentieables", Id)
+            ? CreatePrivateDirectory(Path.Combine(s_serverRoot.Value, Id))
             : "/";
         var path = Path.Combine(root, BlazorEssentials.IsServer ? name : BlazorFileSystem.GetBrowserDirectoryName(name));
         Directory.CreateDirectory(path);
         return path;
+    }
+
+    // Server: <temp>/essentieables/<process id>/<session id>, readable by the account of the server only (0700 on Unix,
+    // where /tmp is shared), and the folders left by a process that crashed are deleted on the first use.
+    static readonly Lazy<string> s_serverRoot = new(() =>
+    {
+        var parent = CreatePrivateDirectory(Path.Combine(Path.GetTempPath(), "essentieables"));
+        PurgeOrphans(parent);
+        return CreatePrivateDirectory(Path.Combine(parent, Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+    });
+
+    static string CreatePrivateDirectory(string path)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            // %TEMP% is per user on Windows.
+            Directory.CreateDirectory(path);
+            return path;
+        }
+
+        const UnixFileMode ownerOnly = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+        Directory.CreateDirectory(path, ownerOnly);
+        // A folder created beforehand by another account: chmod fails (only the owner may), so it is never used.
+        File.SetUnixFileMode(path, ownerOnly);
+        return path;
+    }
+
+    static void PurgeOrphans(string parent)
+    {
+        try
+        {
+            foreach (var directory in Directory.EnumerateDirectories(parent))
+            {
+                var name = Path.GetFileName(directory);
+                bool orphan;
+                if (int.TryParse(name, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var pid))
+                {
+                    orphan = pid != Environment.ProcessId && !IsRunning(pid);
+                }
+                else
+                {
+                    // Session folders of the former layout (directly under essentieables/): left by a crash if still there.
+                    orphan = Directory.GetLastWriteTimeUtc(directory) < DateTime.UtcNow.AddDays(-1);
+                }
+
+                if (orphan)
+                {
+                    try
+                    {
+                        Directory.Delete(directory, recursive: true);
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                    {
+                        System.Diagnostics.Debug.WriteLine(ex);
+                    }
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            System.Diagnostics.Debug.WriteLine(ex);
+        }
+
+        static bool IsRunning(int pid)
+        {
+            try
+            {
+                using var process = System.Diagnostics.Process.GetProcessById(pid);
+                return !process.HasExited;
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or PlatformNotSupportedException)
+            {
+                return false;
+            }
+        }
     }
 
     public async ValueTask DisposeAsync()

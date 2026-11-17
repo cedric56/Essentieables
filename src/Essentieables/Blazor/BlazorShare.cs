@@ -41,26 +41,24 @@ internal class BlazorShare : IAvaeShare
 #endif
     }
 
+    /// <summary>
+    /// Shares through the browser. Dismissing the share sheet is not an error (as with MAUI); an unsupported browser throws
+    /// <see cref="FeatureNotSupportedException"/>, a refusal (no user gesture, permission) <see cref="PermissionException"/>.
+    /// </summary>
     public async Task RequestAsync(ShareTextRequest request)
     {
+        ArgumentNullException.ThrowIfNull(request);
+        if (!IsSupported)
+            throw new FeatureNotSupportedException("The Web Share API is not available in this browser.");
+
         try
         {
-            if (!IsSupported)
-                throw new FeatureNotSupportedException("The Web Share API is not available in this browser.");
-
-            await BlazorEssentials.Module.InvokeVoidAsync("share", request.Title, request.Text, request.Uri).ConfigureAwait(false);
+            await BlazorEssentials.Module.InvokeAsync<bool>("share", request.Title, request.Text, request.Uri).ConfigureAwait(false);
         }
-#if DEBUG
-        catch (Exception ex)
+        catch (JSException ex) when (BlazorEssentials.MapJSException(ex, "Sharing") is { } mapped)
         {
-            System.Diagnostics.Debug.WriteLine(ex);
+            throw mapped;
         }
-#else
-        catch
-        {
-
-        }
-#endif
     }
 
     public Task RequestAsync(ShareFileRequest request) =>
@@ -83,8 +81,8 @@ internal class BlazorShare : IAvaeShare
             if (file is BlazorFileResult b)
                 shareFiles.Add(new BlazorShareFile(b));
             else
-                // Use standard MAUI ShareFile for regular files
-                shareFiles.Add(new ShareFile(file));
+                // Not new ShareFile(file): its copy reads ContentType, which throws on the portable build without one.
+                shareFiles.Add(new ShareFile(file.FullPath, file.GetContentTypeOrDefault()));
         }
 
         // Execute the native share request with the converted files
@@ -96,7 +94,8 @@ internal class BlazorShare : IAvaeShare
     }
 
     async Task ShareFilesAsync(string? title, IReadOnlyList<ShareFile> files)
-    {if (!IsSupported)
+    {
+        if (!IsSupported)
             throw new FeatureNotSupportedException("The Web Share API is not available in this browser.");
         if (files.Count == 0)
             throw new ArgumentException("No files were provided to share.");
@@ -107,7 +106,7 @@ internal class BlazorShare : IAvaeShare
         for (var i = 0; i < files.Count; i++)
         {
             names[i] = files[i].FileName;
-            types[i] = files[i].ContentType ?? string.Empty;
+            types[i] = files[i].GetContentTypeOrDefault();
             contents[i] = Convert.ToBase64String(
                 files[i] is BlazorShareFile f ? 
                 f.Data ?? await File.ReadAllBytesAsync(files[i].FullPath).ConfigureAwait(false) :                
@@ -116,28 +115,21 @@ internal class BlazorShare : IAvaeShare
 
         try
         {
-            await BlazorEssentials.Module.InvokeVoidAsync("shareFiles",
+            // False when the user dismissed the share sheet: not an error.
+            await BlazorEssentials.Module.InvokeAsync<bool>("shareFiles",
                     title,
                     JsonSerializer.Serialize(names, AvaeJsonSerializerContext.Default.StringArray),
                     JsonSerializer.Serialize(types, AvaeJsonSerializerContext.Default.StringArray),
                     JsonSerializer.Serialize(contents, AvaeJsonSerializerContext.Default.StringArray)).ConfigureAwait(false);
-
         }
-        catch (Exception ex) when (ex.Message.Contains("unsupported", StringComparison.OrdinalIgnoreCase))
+        catch (JSException ex) when (ex.Message.Contains("unsupported", StringComparison.OrdinalIgnoreCase))
         {
-            throw new FeatureNotSupportedException("This browser cannot share files via the Web Share API.");
-        }       
-#if DEBUG
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine(ex);
+            throw new FeatureNotSupportedException("This browser cannot share these files via the Web Share API.");
         }
-#else
-        catch
+        catch (JSException ex) when (BlazorEssentials.MapJSException(ex, "Sharing") is { } mapped)
         {
-
+            throw mapped;
         }
-#endif
     }
 }
 

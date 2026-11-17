@@ -675,12 +675,26 @@ export async function getAllContactsAsync(multiple) {
 	if (!contactsIsSupported())
 		throw new Error("unsupported");
 
-	const contacts = await navigator.contacts.select(["name", "email", "tel", "address"], { multiple: !!multiple });
+	// Asking for a property the browser does not support rejects select() with a TypeError.
+	const wanted = ["name", "email", "tel", "address"];
+	let available = wanted;
+	try {
+		const supported = await navigator.contacts.getProperties?.();
+		if (Array.isArray(supported))
+			available = wanted.filter(p => supported.includes(p));
+	} catch {
+	}
+
+	const contacts = await navigator.contacts.select(available, { multiple: !!multiple });
+	const strings = values => (values ?? []).filter(v => typeof v === "string");
 	return JSON.stringify(contacts.map(c => ({
-		name: c.name,
-		email: c.email,
-		tel: c.tel,
-		address: c.address,
+		name: strings(c.name),
+		email: strings(c.email),
+		tel: strings(c.tel),
+		// ContactAddress objects: as one line of text each (List<string> in .NET).
+		address: (c.address ?? []).map(a => [
+			...(a.addressLine ?? []), a.postalCode, a.city, a.region, a.country
+		].filter(Boolean).join(", ")).filter(Boolean),
 	})));
 }
 
@@ -843,12 +857,24 @@ export function secureRemoveAll(prefix) {
 
 // ---------- Clipboard ----------
 
-export function clipboardWriteText(text) {
-	return globalThis.navigator.clipboard.writeText(text);
+export async function clipboardWriteText(text) {
+	if (!globalThis.navigator.clipboard?.writeText)
+		throw new Error("unsupported");
+	try {
+		await globalThis.navigator.clipboard.writeText(text);
+	} catch (error) {
+		throw named(error);
+	}
 }
 
-export function clipboardReadText() {
-	return globalThis.navigator.clipboard.readText();
+export async function clipboardReadText() {
+	if (!globalThis.navigator.clipboard?.readText)
+		throw new Error("unsupported");
+	try {
+		return await globalThis.navigator.clipboard.readText();
+	} catch (error) {
+		throw named(error);
+	}
 }
 
 // ---------- Device info ----------
@@ -1023,24 +1049,32 @@ function appleModel(family) {
 // ---------- Display ----------
 function ddGetInfo() {
 	const o = screen.orientation;
+	const ratio = window.devicePixelRatio || 1;
 	return {
-		width: window.innerWidth,
-		height: window.innerHeight,
-		pixelRatio: window.devicePixelRatio || 1,
+		// As MAUI: the screen in physical pixels (Width / Density = device-independent units), not the viewport.
+		width: Math.round(screen.width * ratio),
+		height: Math.round(screen.height * ratio),
+		pixelRatio: ratio,
+		// Empty without screen.orientation (older Safari): .NET then deduces it from the size.
 		orientationType: o?.type ?? ""
 	};
 }
 
 let ddWakeLock = null;
 let ddWakeLockRequested = false;
+let ddWakeLockRef = null;
 
 async function ddAcquireWakeLock() {
 	if (!("wakeLock" in navigator)) return false;
 
 	try {
-		ddWakeLock = await navigator.wakeLock.request("screen");
-		ddWakeLock.addEventListener("release", () => {
-			ddWakeLock = null;
+		const lock = await navigator.wakeLock.request("screen");
+		ddWakeLock = lock;
+		lock.addEventListener("release", () => {
+			if (ddWakeLock === lock)
+				ddWakeLock = null;
+			// Released by the browser (tab hidden…): KeepScreenOn reflects it until it is re-acquired.
+			ddWakeLockRef?.invokeMethodAsync("OnWakeLockChanged", false).catch(() => { });
 		});
 		return true;
 	} catch {
@@ -1062,6 +1096,7 @@ export function ddGetSnapshot() {
 
 export async function ddSetWakeLock(dotNetRef, on) {
 	ddWakeLockRequested = on;
+	ddWakeLockRef = dotNetRef;
 
 	if (on) {
 		const ok = await ddAcquireWakeLock();
@@ -1308,12 +1343,34 @@ export function shareIsSupported() {
 	return typeof globalThis.navigator.share === 'function';
 }
 
+/**
+ * Errors reach .NET with their DOMException name in the message ("NotAllowedError: …"), so the C# side can map them
+ * (permission, unsupported) without guessing from the localized text.
+ */
+function named(error) {
+	if (error instanceof Error && error.name && error.name !== "Error" && !error.message.startsWith(error.name + ":"))
+		return new Error(`${error.name}: ${error.message}`);
+	return error;
+}
+
+/** Resolves with false when the user dismissed the share sheet (AbortError), true when shared; rejects otherwise. */
+async function shareData(data) {
+	try {
+		await globalThis.navigator.share(data);
+		return true;
+	} catch (error) {
+		if (error?.name === "AbortError")
+			return false;
+		throw named(error);
+	}
+}
+
 export function share(title, text, url) {
 	const data = {};
 	if (title) data.title = title;
 	if (text) data.text = text;
 	if (url) data.url = url;
-	return globalThis.navigator.share(data);
+	return shareData(data);
 }
 
 export function shareFiles(title, namesJson, typesJson, base64Json) {
@@ -1325,7 +1382,7 @@ export function shareFiles(title, namesJson, typesJson, base64Json) {
 		return Promise.reject(new Error('unsupported'));
 	const data = { files };
 	if (title) data.title = title;
-	return globalThis.navigator.share(data);
+	return shareData(data);
 }
 
 // ---------- Launcher / browser ----------
@@ -1363,18 +1420,20 @@ export function navigateTo(url) {
 	return true;
 }
 
-// A blob: URL has the origin of the app: an HTML/SVG/XML file opened from one could run script
-// with access to this origin (localStorage, the SecureStorage key…). Those types are downloaded.
-const ACTIVE_CONTENT = /^(text\/html|application\/xhtml\+xml|image\/svg\+xml|text\/xml|application\/xml|text\/javascript|application\/javascript|application\/x-javascript)\b/i;
+// A blob: URL has the origin of the app: a file rendered as a document (HTML, SVG, XML, XSL, RSS/Atom…) could run script
+// with access to this origin (localStorage, the SecureStorage key…). Only types that cannot are opened; the others are
+// downloaded (allow list: a deny list always misses one).
+const INLINE_CONTENT = /^(image\/(png|jpeg|gif|webp|avif|bmp|x-icon|vnd\.microsoft\.icon)|application\/pdf|text\/plain|audio\/[\w.+-]+|video\/[\w.+-]+)$/i;
 
 export async function openFileStream(streamRef, contentType, name) {
-	const type = contentType || 'application/octet-stream';
-	const blob = new Blob([await streamRef.arrayBuffer()], { type: ACTIVE_CONTENT.test(type) ? 'application/octet-stream' : type });
+	const type = (contentType || 'application/octet-stream').split(';')[0].trim();
+	const inline = INLINE_CONTENT.test(type);
+	const blob = new Blob([await streamRef.arrayBuffer()], { type: inline ? type : 'application/octet-stream' });
 	const url = URL.createObjectURL(blob);
 	// Give the new tab time to load before revoking.
 	setTimeout(() => URL.revokeObjectURL(url), 60000);
 
-	if (ACTIVE_CONTENT.test(type)) {
+	if (!inline) {
 		const a = document.createElement("a");
 		a.href = url;
 		a.download = name || "download";
@@ -1395,14 +1454,24 @@ export async function openFileStream(streamRef, contentType, name) {
 
 // ---------- Text to speech ----------
 
-export function speechGetVoices() {
+export async function speechGetVoices() {
 	const synth = globalThis.speechSynthesis;
 	if (!synth)
 		return JSON.stringify([]);
-	return JSON.stringify(synth.getVoices().map(v => ({ name: v.name, lang: v.lang, isDefault: v.default })));
+	let voices = synth.getVoices();
+	if (voices.length === 0) {
+		// Chrome loads the voices asynchronously: wait for them a moment.
+		await new Promise(resolve => {
+			const done = () => { synth.removeEventListener?.("voiceschanged", done); resolve(); };
+			synth.addEventListener?.("voiceschanged", done);
+			setTimeout(done, 1500);
+		});
+		voices = synth.getVoices();
+	}
+	return JSON.stringify(voices.map(v => ({ name: v.name, lang: v.lang, isDefault: v.default, voiceURI: v.voiceURI })));
 }
 
-export function speak(text, lang, pitch, rate, volume) {
+export function speak(text, lang, pitch, rate, volume, voiceName) {
 	return new Promise((resolve, reject) => {
 		const synth = globalThis.speechSynthesis;
 		if (!synth) {
@@ -1411,11 +1480,16 @@ export function speak(text, lang, pitch, rate, volume) {
 		}
 		const utterance = new SpeechSynthesisUtterance(text);
 		if (lang) utterance.lang = lang;
+		if (voiceName) {
+			const voice = synth.getVoices().find(v => v.voiceURI === voiceName || v.name === voiceName);
+			if (voice) utterance.voice = voice;
+		}
 		if (pitch >= 0) utterance.pitch = pitch;
 		if (rate >= 0) utterance.rate = rate;
 		if (volume >= 0) utterance.volume = volume;
 		utterance.onend = () => resolve();
-		utterance.onerror = e => e.error === 'canceled' || e.error === 'interrupted' ? resolve() : reject(new Error(e.error));
+		// "not-allowed" (no user activation, autoplay policy), "synthesis-failed"… are reported, only cancellation is not.
+		utterance.onerror = e => e.error === 'canceled' || e.error === 'interrupted' ? resolve() : reject(new Error(`SpeechSynthesisError: ${e.error}`));
 		synth.speak(utterance);
 	});
 }
@@ -1458,7 +1532,8 @@ export function sensorIsSupported(kind) {
 			return "DeviceOrientationEvent" in globalThis;
 
 		case "magnetometer":
-			return "magnetometer" in navigator;
+			// Generic Sensor API: the constructor is a global, not a member of navigator.
+			return "Magnetometer" in globalThis;
 
 		default:
 			return false;
@@ -1486,11 +1561,22 @@ export async function sensorStart(dotNetRef, kind, frequencyHz) {
 	let eventName;
 	let handler;
 
-	const notify = payload =>
+	// SensorSpeed: devicemotion fires at 60 Hz or more, which would flood a Blazor Server circuit; readings are sent at
+	// most frequencyHz times per second.
+	const minInterval = frequencyHz > 0 ? 1000 / frequencyHz : 0;
+	let lastSent = 0;
+	const describe = err => err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+	const notify = payload => {
+		const now = performance.now();
+		if (now - lastSent < minInterval)
+			return;
+		lastSent = now;
 		dotNetRef
 			.invokeMethodAsync("OnReading", JSON.stringify(payload))
 			.catch(err => dotNetRef
-				.invokeMethodAsync("OnError", JSON.stringify(err)));
+				.invokeMethodAsync("OnError", JSON.stringify({ message: describe(err) }))
+				.catch(() => { /* reference disposed: the sensor is being stopped */ }));
+	};
 
 	switch (kind) {
 		case "accelerometer":
@@ -1547,17 +1633,28 @@ export async function sensorStart(dotNetRef, kind, frequencyHz) {
 			};
 			break;
 
-		case "magnetometer":
+		case "magnetometer": {
 			eventName = "reading";
-			magSensor = new Magnetometer({ frequency: frequencyHz });
+			let sensor;
+			try {
+				sensor = new Magnetometer({ frequency: frequencyHz });
+			} catch {
+				return false; // blocked by the permissions policy, or not allowed in this context
+			}
+			const current = sensor;
 			handler = () => notify({
-				x: magSensor.x ?? 0,
-				y: magSensor.y ?? 0,
-				z: magSensor.z ?? 0
+				x: current.x ?? 0,
+				y: current.y ?? 0,
+				z: current.z ?? 0
 			});
-			magSensor.addEventListener("reading", handler);
-			magSensor.start();
+			sensor.addEventListener("reading", handler);
+			sensor.addEventListener("error", e => {
+				dotNetRef.invokeMethodAsync("OnError", JSON.stringify({ message: describe(e.error) })).catch(() => { });
+			});
+			sensor.start();
+			magSensor = sensor;
 			break;
+		}
 
 		default:
 			return false;
@@ -1581,6 +1678,8 @@ export function sensorStop(kind) {
 
 		if (kind === "magnetometer" && magSensor !== null) {
 			magSensor.removeEventListener(entry.eventName, entry.handler);
+			// Stops the hardware sensor (battery, permission indicator).
+			magSensor.stop();
 			magSensor = null;
 		}
 		else {
@@ -1851,7 +1950,8 @@ export function authenticate(url) {
 			}, 300000);
 
 			// Open the authentication URL only after installing listeners.
-			popup.location.href = url;
+			// "/auth/start?…" is resolved against <base href>, so an app hosted under a sub-path reaches its own endpoint.
+			popup.location.href = new URL(url.replace(/^\//, ""), document.baseURI).href;
 		});
 }
 
@@ -2021,9 +2121,22 @@ export function fsStopPeriodicFlush() {
 // ---------- Torch ----------
 let stream = null;
 
+/** Always a boolean: undefined would reach .NET as null and fail InvokeAsync<bool>. */
 export async function isTorchSupported() {
-	return navigator.mediaDevices?.getUserMedia &&
-		navigator.mediaDevices.getSupportedConstraints().torch;
+	return !!(navigator.mediaDevices?.getUserMedia &&
+		navigator.mediaDevices.getSupportedConstraints?.().torch);
+}
+
+const TORCH_UNSUPPORTED = "TorchNotSupported";
+
+/** Chrome lists torch among the supported constraints even without a lamp: the capabilities of the track tell. */
+function ensureTrackHasTorch(track) {
+	const capabilities = typeof track?.getCapabilities === "function" ? track.getCapabilities() : {};
+	if (!capabilities.torch) {
+		const error = new Error("This camera has no flashlight.");
+		error.name = TORCH_UNSUPPORTED;
+		throw error;
+	}
 }
 
 export async function on() {
@@ -2031,8 +2144,10 @@ export async function on() {
 		throw new Error("Camera access is not supported.");
 	}
 
-	if (!navigator.mediaDevices.getSupportedConstraints().torch) {
-		throw new Error("Flashlight control is not supported.");
+	if (!navigator.mediaDevices.getSupportedConstraints?.().torch) {
+		const error = new Error("Flashlight control is not supported.");
+		error.name = TORCH_UNSUPPORTED;
+		throw error;
 	}
 
 	// Avoid opening the camera more than once.
@@ -2058,6 +2173,8 @@ export async function on() {
 	const track = stream.getVideoTracks()[0];
 
 	try {
+		// An "advanced" constraint that cannot be satisfied is ignored silently: check first.
+		ensureTrackHasTorch(track);
 		await track.applyConstraints({
 			advanced: [{ torch: true }]
 		});

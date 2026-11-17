@@ -1,4 +1,4 @@
-
+﻿
 
 using System;
 using System.Collections.Generic;
@@ -22,6 +22,7 @@ internal class BlazorVersionTracking : IVersionTracking
 	List<string> versionHistory = [];
 	List<string> buildHistory = [];
 	bool tracked;
+	bool trackPending;
 
 	public BlazorVersionTracking(IPreferences preferences, IAppInfo appInfo)
 	{
@@ -57,10 +58,26 @@ internal class BlazorVersionTracking : IVersionTracking
 	public bool IsFirstLaunchForBuild(string build) =>
 		CurrentBuild == build ? IsFirstLaunchForCurrentBuild : !buildHistory.Contains(build);
 
+	/// <summary>
+	/// Records the current version. Called before the preferences are loaded (Program.cs, before
+	/// <c>BlazorEssentials.InitializeAsync</c>), it would read an empty history (first launch every time) and overwrite it:
+	/// it then runs as soon as they are loaded.
+	/// </summary>
 	public void Track()
 	{
 		if (tracked)
 			return;
+		if (preferences is BlazorPreferences blazorPreferences && !blazorPreferences.TryEnsureLoaded())
+		{
+			if (!trackPending)
+			{
+				trackPending = true;
+				blazorPreferences.Loaded += Track;
+			}
+			return;
+		}
+		if (preferences is BlazorPreferences loaded)
+			loaded.Loaded -= Track;
 		tracked = true;
 
 		versionHistory = ReadHistory(VersionsKey);

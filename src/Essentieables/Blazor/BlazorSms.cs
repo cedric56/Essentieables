@@ -14,13 +14,16 @@ internal class BlazorSms : ISms
 {
     public bool IsComposeSupported => true;
 
+    static bool IsApple => Microsoft.Maui.Devices.DeviceInfo.Current is BlazorDeviceInfo { IsIPhone: true } or BlazorDeviceInfo { IsIPad: true };
+
     public async Task ComposeAsync(SmsMessage? message)
     {
         var url = new StringBuilder("sms:");
         if (message?.Recipients is { Count: > 0 })
             url.Append(string.Join(",", message.Recipients.Select(Uri.EscapeDataString)));
         if (!string.IsNullOrEmpty(message?.Body))
-            url.Append("?body=").Append(Uri.EscapeDataString(message.Body));
+            // iOS reads the body after "&", other platforms after "?".
+            url.Append(IsApple ? "&body=" : "?body=").Append(Uri.EscapeDataString(message.Body));
         await BlazorLauncher.NavigateToAsync(url.ToString());
     }
 }

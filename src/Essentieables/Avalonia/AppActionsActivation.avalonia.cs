@@ -198,7 +198,10 @@ static class AvaeAppActionsActivation
                 cbData = (argument.Length + 1) * 2, // UTF-16, terminating null included
                 lpData = data,
             };
-            return SendMessage(window, WM_COPYDATA, IntPtr.Zero, ref copyData) != IntPtr.Zero;
+            // A running instance that hangs must not hang this one: 5 s at most, and not at all if it is not responding.
+            var sent = SendMessageTimeout(window, WM_COPYDATA, IntPtr.Zero, ref copyData,
+                SMTO_ABORTIFHUNG | SMTO_BLOCK, 5000, out var result);
+            return sent != IntPtr.Zero && result != IntPtr.Zero;
         }
         finally
         {
@@ -214,7 +217,11 @@ static class AvaeAppActionsActivation
         public IntPtr lpData;
     }
 
+    const uint SMTO_BLOCK = 0x0001;
+    const uint SMTO_ABORTIFHUNG = 0x0002;
+
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, ref COPYDATASTRUCT lParam);
+    static extern IntPtr SendMessageTimeout(
+        IntPtr hWnd, int msg, IntPtr wParam, ref COPYDATASTRUCT lParam, uint fuFlags, uint uTimeout, out IntPtr lpdwResult);
 }
 #endif

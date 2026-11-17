@@ -58,10 +58,11 @@ static class PlatformMethods
         if (IntPtr.Size == 8)
             return SetWindowLongPtr64(hWnd, nIndex, dwNewLong);
         else
-            return new IntPtr(SetWindowLong32(hWnd, nIndex, dwNewLong));
+            // SetWindowLong takes a LONG (32 bits): passing a 64-bit value to this stdcall function corrupts the stack on x86.
+            return new IntPtr(SetWindowLong32(hWnd, nIndex, unchecked((int)dwNewLong)));
 
         [DllImport("user32.dll", EntryPoint = "SetWindowLong")]
-        static extern int SetWindowLong32(IntPtr hWnd, WindowLongFlags nIndex, long dwNewLong);
+        static extern int SetWindowLong32(IntPtr hWnd, WindowLongFlags nIndex, int dwNewLong);
 
         [DllImport("user32.dll", EntryPoint = "SetWindowLongPtr")]
         static extern IntPtr SetWindowLongPtr64(IntPtr hWnd, WindowLongFlags nIndex, long dwNewLong);
@@ -78,7 +79,9 @@ static class PlatformMethods
         static extern int GetWindowLong32(IntPtr hWnd, WindowLongFlags nIndex);
 
         [DllImport("user32.dll", EntryPoint = "GetWindowLongPtr")]
-        static extern long GetWindowLongPtr64(IntPtr hWnd, WindowLongFlags nIndex);
+        static extern IntPtr GetWindowLongPtr64Core(IntPtr hWnd, WindowLongFlags nIndex);
+
+        static long GetWindowLongPtr64(IntPtr hWnd, WindowLongFlags nIndex) => GetWindowLongPtr64Core(hWnd, nIndex).ToInt64();
     }
 
     [DllImport("user32.dll")]
@@ -186,7 +189,7 @@ static class PlatformMethods
         WS_SYSMENU = 0x00080000,
         WS_THICKFRAME = 0x00040000,
         WS_MINIMIZEBOX = 0x00020000,
-        WS_MAXIMIZEBOX = 0x00020000,
+        WS_MAXIMIZEBOX = 0x00010000, // 0x00020000 in MAUI, which is WS_MINIMIZEBOX
         WS_OVERLAPPED = 0x00000000,
         WS_CAPTIONANDSYSTEMMENU = WS_CAPTION | WS_SYSMENU,
         WS_OVERLAPPEDWINDOW = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX

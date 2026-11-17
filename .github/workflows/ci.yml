@@ -67,6 +67,16 @@ jobs:
         if: matrix.workloads != ''
         run: dotnet workload install ${{ matrix.workloads }}
 
+      - name: Check the JS modules
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          # ES modules: checked as .mjs (node --check parses, it does not resolve the imports).
+          for f in src/Essentieables/Blazor/*.js; do
+            cp "$f" "$RUNNER_TEMP/$(basename "$f" .js).mjs"
+            node --check "$RUNNER_TEMP/$(basename "$f" .js).mjs"
+          done
+
       - name: Unit tests
         run: >
           dotnet test tests/Essentieables.Tests

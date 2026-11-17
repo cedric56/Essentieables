@@ -22,15 +22,20 @@ namespace Essentieables;
 /// identifying User-Agent: see https://operations.osmfoundation.org/policies/nominatim/.
 /// Browsers ignore the User-Agent header set here and send their own: in a browser app, point this
 /// class at your own instance or at a server-side proxy rather than at the public one.
-/// Requests to the public instance are spaced by <see cref="MinimumInterval"/> (process-wide), time out
-/// after <see cref="Timeout"/>, and 429/503 responses are retried after their Retry-After delay.
+/// Requests to the public instance are spaced by <see cref="MinimumInterval"/> (process-wide), each attempt times out
+/// after <see cref="Timeout"/>, and 429/503 responses are retried after their Retry-After delay (up to 30 s).
+/// On Blazor Server the slot is shared by every user of the server: the public instance serves about one request per
+/// second for all of them, so a busy server needs its own Nominatim instance (pass its address to the constructor).
 /// </remarks>
 public class NominatimGeocoding : IGeocoding
 {
     /// <summary>Base address of the public Nominatim instance.</summary>
     public const string DefaultBaseAddress = "https://nominatim.openstreetmap.org/";
 
-    /// <summary>Time allowed for one request, retries included (10 seconds by default).</summary>
+    /// <summary>
+    /// Time allowed for each HTTP attempt (10 seconds by default). The waits between attempts (Retry-After) and for the slot
+    /// of the public instance are not counted: a 30 s Retry-After would otherwise always end in a timeout.
+    /// </summary>
     public static TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(10);
 
     /// <summary>Minimum delay between two requests to the public instance (its policy: one per second).</summary>
@@ -40,7 +45,7 @@ public class NominatimGeocoding : IGeocoding
 
     static readonly Lazy<HttpClient> SharedClient = new(() =>
     {
-        // The timeout is applied per call (see GetStringAsync) so that it also covers the retries.
+        // The timeout is applied per attempt (see GetStringAsync).
         var client = new HttpClient { Timeout = System.Threading.Timeout.InfiniteTimeSpan };
         client.DefaultRequestHeaders.UserAgent.ParseAdd("Essentieables/1.0 (+https://github.com/cedric56/Essentieables)");
         return client;
@@ -80,21 +85,20 @@ public class NominatimGeocoding : IGeocoding
 
     async Task<string> GetStringAsync(string url)
     {
-        using var timeout = new CancellationTokenSource(Timeout);
-        var token = timeout.Token;
-
         for (var attempt = 1; ; attempt++)
         {
             if (IsPublicInstance)
-                await WaitForPublicInstanceSlotAsync(token).ConfigureAwait(false);
+                await WaitForPublicInstanceSlotAsync(CancellationToken.None).ConfigureAwait(false);
 
+            using var timeout = new CancellationTokenSource(Timeout);
+            var token = timeout.Token;
             using var response = await _client.GetAsync(url, HttpCompletionOption.ResponseContentRead, token).ConfigureAwait(false);
             if ((response.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable) && attempt < MaxAttempts)
             {
                 var delay = GetRetryDelay(response, attempt);
                 if (IsPublicInstance)
                     PushBackPublicInstance(delay);
-                await Task.Delay(delay, token).ConfigureAwait(false);
+                await Task.Delay(delay).ConfigureAwait(false);
                 continue;
             }
 

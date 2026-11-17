@@ -1,4 +1,4 @@
-
+﻿
 
 using Microsoft.JSInterop;
 using Microsoft.Maui.Devices;
@@ -10,7 +10,8 @@ using System.Threading.Tasks;
 namespace Essentieables;
 
 /// <summary>
-/// Display info from window.innerWidth/Height and devicePixelRatio. KeepScreenOn uses the
+/// Display info from the screen size in physical pixels (screen.width × devicePixelRatio, as MAUI: Width / Density gives
+/// device-independent units) and screen.orientation (deduced from the size when absent). KeepScreenOn uses the
 /// Screen Wake Lock API where available (secure contexts, most modern browsers), re-acquired
 /// automatically when the page becomes visible again, since browsers release wake locks
 /// whenever the tab is hidden.
@@ -56,8 +57,13 @@ internal sealed class BlazorDeviceDisplay : IDeviceDisplay, IAsyncDisposable
 
     public bool KeepScreenOn
     {
+        // The value set until the browser answers (then what it granted): KeepScreenOn = true; reads true right away.
         get => _wakeLockActive;
-        set => _ = SetWakeLockSafelyAsync(value);
+        set
+        {
+            _wakeLockActive = value;
+            _ = SetWakeLockSafelyAsync(value);
+        }
     }
 
     private async Task SetWakeLockSafelyAsync(bool on)
@@ -170,10 +176,18 @@ Debug.WriteLine(ex);
     }
 
     private void Apply(double width, double height, double pixelRatio, string orientationType)
+        => _display = Compute(width, height, pixelRatio, orientationType);
+
+    internal static DisplayInfo Compute(double width, double height, double pixelRatio, string? orientationType)
     {
-        var orientation = orientationType.StartsWith("portrait", StringComparison.Ordinal)
-            ? DisplayOrientation.Portrait
-            : DisplayOrientation.Landscape;
+        orientationType ??= string.Empty;
+        var orientation =
+            orientationType.StartsWith("portrait", StringComparison.Ordinal) ? DisplayOrientation.Portrait
+            : orientationType.StartsWith("landscape", StringComparison.Ordinal) ? DisplayOrientation.Landscape
+            // No screen.orientation (older Safari): from the size.
+            : width <= 0 || height <= 0 ? DisplayOrientation.Unknown
+            : width > height ? DisplayOrientation.Landscape
+            : DisplayOrientation.Portrait;
 
         var rotation = orientationType switch
         {
@@ -182,7 +196,7 @@ Debug.WriteLine(ex);
             _ => DisplayRotation.Unknown,
         };
 
-        _display = new DisplayInfo(width, height, pixelRatio, orientation, rotation);
+        return new DisplayInfo(width, height, pixelRatio, orientation, rotation);
     }
 
     public async ValueTask DisposeAsync()

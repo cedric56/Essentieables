@@ -92,12 +92,12 @@ internal class BlazorLauncher : ILauncher
         await using var stream = File.OpenRead(request.File.FullPath);
         using var streamReference = new DotNetStreamReference(stream, leaveOpen: true);
 
-        // HTML, SVG, XML and script files are downloaded instead of opened: a blob: URL has the
+        // Only images, PDF, plain text, audio and video are opened; other files are downloaded: a blob: URL has the
         // origin of the app, so their scripts would run with access to it.
         return await BlazorEssentials.Module.InvokeAsync<bool>(
             "openFileStream",
             streamReference,
-            request.File.ContentType,
+            request.File.GetContentTypeOrDefault(),
             request.File.FileName).ConfigureAwait(false);
     }
 

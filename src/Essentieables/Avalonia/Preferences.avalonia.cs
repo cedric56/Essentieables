@@ -302,7 +302,41 @@ class OriginalUnpackagedPreferencesImplementation : IPreferences
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            // Locked (antivirus, OneDrive…): saving now would replace the file with the new keys only. Reading is retried
+            // before each save; until it works, changes stay in memory.
+            _unreadable = path == _path;
             Console.Error.WriteLine($"Essentieables: preferences could not be read: {ex.Message}");
+        }
+    }
+
+    bool _unreadable;
+
+    /// <summary>Reads the file again after a failed load; the values changed since win. False while it is still unreadable.</summary>
+    bool RecoverUnreadable()
+    {
+        try
+        {
+            PreferencesDictionary? readPreferences;
+            using (var stream = File.OpenRead(_path))
+                readPreferences = JsonSerializer.Deserialize(stream, AvaloniaPreferencesJsonSerializerContext.Default.PreferencesDictionary);
+            foreach (var (sharedName, values) in readPreferences ?? new())
+            {
+                var current = _preferences.GetOrAdd(sharedName, _ => new ShareNameDictionary());
+                foreach (var (key, value) in values)
+                    current.TryAdd(key, value);
+            }
+            _unreadable = false;
+            return true;
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
+            _unreadable = false;
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            Console.Error.WriteLine($"Essentieables: preferences still unreadable, not saved: {ex.Message}");
+            return false;
         }
     }
 
@@ -310,6 +344,9 @@ class OriginalUnpackagedPreferencesImplementation : IPreferences
     {
         lock (_locker)
         {
+            if (_unreadable && !RecoverUnreadable())
+                return;
+
             // Through a temporary file: a crash while writing never truncates the preferences.
             AtomicFile.Write(_path, stream =>
                 JsonSerializer.Serialize(stream, _preferences, AvaloniaPreferencesJsonSerializerContext.Default.PreferencesDictionary));

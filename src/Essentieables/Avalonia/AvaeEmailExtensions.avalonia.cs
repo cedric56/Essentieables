@@ -22,8 +22,19 @@ internal static class AvaeEmailExtensions
 
     private const string CrLf = "\r\n";
 
+    // RFC 5322: CRLF line ends on every OS (StringBuilder.AppendLine would write LF on Linux and macOS).
     private static void AppendLine(StringBuilder builder, string value = "")
         => builder.Append(value).Append(CrLf);
+
+    /// <summary>A header value without CR/LF: a recipient or a file name cannot inject headers into the draft.</summary>
+    private static string HeaderValue(string? value)
+        => (value ?? string.Empty).Replace("\r", " ").Replace("\n", " ");
+
+    private static string QuotedValue(string? value)
+        => HeaderValue(value).Replace("\\", "\\\\").Replace("\"", "\\\"");
+
+    private static string Recipients(IEnumerable<string> recipients)
+        => string.Join(",", recipients.Select(HeaderValue).Where(r => r.Trim().Length > 0));
 
     private static string EncodeQuotedPrintable(string value)
     {
@@ -151,44 +162,44 @@ internal static class AvaeEmailExtensions
 
         // === HEADERS SECTION ===        
         if (message.To?.Count > 0)
-            builder.AppendLine($"To: {string.Join(",", message.To)}");
+            AppendLine(builder, $"To: {Recipients(message.To)}");
 
         if (message.Cc?.Count > 0)
-            builder.AppendLine($"Cc: {string.Join(",", message.Cc)}");
+            AppendLine(builder, $"Cc: {Recipients(message.Cc)}");
 
         if (message.Bcc?.Count > 0)
-            builder.AppendLine($"Bcc: {string.Join(",", message.Bcc)}");
+            AppendLine(builder, $"Bcc: {Recipients(message.Bcc)}");
 
         if (!string.IsNullOrWhiteSpace(message.Subject))
-            builder.AppendLine($"Subject: {EncodeSubject(message.Subject)}");
+            AppendLine(builder, $"Subject: {EncodeSubject(message.Subject)}");
 
         AppendLine(builder, $"Date: {DateTimeOffset.UtcNow.ToString("ddd, dd MMM yyyy HH:mm:ss '+0000'", CultureInfo.InvariantCulture)}");
-        builder.AppendLine($"MIME-Version: 1.0");
-        builder.AppendLine($"X-Unsent: 1");
+        AppendLine(builder, $"MIME-Version: 1.0");
+        AppendLine(builder, $"X-Unsent: 1");
 
         // Set Content-Type based on message structure
         if (message.BodyFormat == EmailBodyFormat.Html || message.Attachments?.Count > 0)
         {
-            builder.AppendLine($"Content-Type: multipart/mixed; boundary=\"{boundary}\"");
+            AppendLine(builder, $"Content-Type: multipart/mixed; boundary=\"{boundary}\"");
         }
         else
         {
-            builder.AppendLine($"Content-Type: text/plain; charset=utf-8");
+            AppendLine(builder, $"Content-Type: text/plain; charset=utf-8");
         }
 
         // IMPORTANT: Empty line separating headers from body
-        builder.AppendLine();
+        AppendLine(builder);
 
         // === BODY SECTION (starts after the empty line) ===
         if (message.BodyFormat == EmailBodyFormat.Html || message.Attachments?.Count > 0)
         {
             // Start multipart message
-            builder.AppendLine($"This is a multipart message in MIME format.");
-            builder.AppendLine($"--{boundary}");
+            AppendLine(builder, $"This is a multipart message in MIME format.");
+            AppendLine(builder, $"--{boundary}");
 
             // Body part with alternative views
-            builder.AppendLine($"Content-Type: multipart/alternative; boundary=\"{altBoundary}\"");
-            builder.AppendLine();
+            AppendLine(builder, $"Content-Type: multipart/alternative; boundary=\"{altBoundary}\"");
+            AppendLine(builder);
 
             // Plain text version (if not HTML or if explicitly provided)
             if (!string.IsNullOrEmpty(message.Body))
@@ -196,16 +207,16 @@ internal static class AvaeEmailExtensions
                 var encoding = message.BodyFormat == EmailBodyFormat.PlainText ?
                     "text/plain" : "text/html";
 
-                builder.AppendLine($"--{altBoundary}");
-                builder.AppendLine($"Content-Type: {encoding}; charset=utf-8");
-                builder.AppendLine($"Content-Transfer-Encoding: quoted-printable");
-                builder.AppendLine();
+                AppendLine(builder, $"--{altBoundary}");
+                AppendLine(builder, $"Content-Type: {encoding}; charset=utf-8");
+                AppendLine(builder, $"Content-Transfer-Encoding: quoted-printable");
+                AppendLine(builder);
                 builder.Append(EncodeQuotedPrintable(message.Body));
                 AppendLine(builder);
-                builder.AppendLine();
+                AppendLine(builder);
             }
-            builder.AppendLine($"--{altBoundary}--");
-            builder.AppendLine();
+            AppendLine(builder, $"--{altBoundary}--");
+            AppendLine(builder);
 
             // Attachments
             foreach (var attachment in message.Attachments ?? [])
@@ -228,16 +239,16 @@ internal static class AvaeEmailExtensions
 
                 async Task AppendAttachement(string contentType, Stream stream)
                 {
-                    builder.AppendLine($"--{boundary}");
-                    builder.AppendLine($"Content-Type: {contentType}; name=\"{attachment.FileName}\"");
-                    builder.AppendLine($"Content-Transfer-Encoding: base64");
-                    builder.AppendLine($"Content-Disposition: attachment; filename=\"{attachment.FileName}\"");
-                    builder.AppendLine();
+                    AppendLine(builder, $"--{boundary}");
+                    AppendLine(builder, $"Content-Type: {HeaderValue(contentType)}; name=\"{QuotedValue(attachment.FileName)}\"");
+                    AppendLine(builder, $"Content-Transfer-Encoding: base64");
+                    AppendLine(builder, $"Content-Disposition: attachment; filename=\"{QuotedValue(attachment.FileName)}\"");
+                    AppendLine(builder);
 
                     //using var memoryStream = new MemoryStream();
                     //await stream.CopyToAsync(memoryStream);
-                    //builder.AppendLine(Convert.ToBase64String(memoryStream.ToArray()));
-                    //builder.AppendLine();
+                    //AppendLine(builder, Convert.ToBase64String(memoryStream.ToArray()));
+                    //AppendLine(builder);
 
                     using var base64Stream = new CryptoStream(stream, new ToBase64Transform(), CryptoStreamMode.Read);
 
@@ -267,13 +278,13 @@ internal static class AvaeEmailExtensions
             }
 
             // End of multipart message
-            builder.AppendLine($"--{boundary}--");
+            AppendLine(builder, $"--{boundary}--");
         }
         else if (!string.IsNullOrEmpty(message.Body))
         {
             // Simple text message
-            builder.AppendLine($"Content-Transfer-Encoding: quoted-printable");
-            builder.AppendLine();
+            AppendLine(builder, $"Content-Transfer-Encoding: quoted-printable");
+            AppendLine(builder);
             builder.Append(EncodeQuotedPrintable(message.Body));
             AppendLine(builder);
         }
@@ -295,6 +306,7 @@ internal static class AvaeEmailExtensions
     /// </remarks>
     private static string EncodeSubject(string subject)
     {
+        subject = HeaderValue(subject);
         if (subject.Any(c => c > 127))
         {
             var bytes = Encoding.UTF8.GetBytes(subject);
