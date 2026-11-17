@@ -269,7 +269,8 @@ public static class Extensions
         {
             contentType = file.ContentType;
         }
-        catch (NotImplementedInReferenceAssemblyException)
+        // NotImplementedInReferenceAssemblyException is internal to MAUI: matched by name.
+        catch (Exception ex) when (ex.GetType().Name == "NotImplementedInReferenceAssemblyException")
         {
             contentType = null;
         }
